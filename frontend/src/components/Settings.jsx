@@ -139,6 +139,7 @@ function Settings({ settings, onUpdate }) {
                     >
                       <option value="openai">🚀 OpenAI (GPT-4)</option>
                       <option value="anthropic">🧠 Anthropic (Claude)</option>
+                      <option value="gemini">✨ Google Gemini</option>
                     </Select>
                   </FormControl>
                   <Text fontSize="md" color="gray.500" mt={3} pl={2}>

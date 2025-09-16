@@ -32,6 +32,7 @@ function PostsTable({
   onGenerateComment,
   onGenerateAllComments,
   onReply,
+  onReplyAll,
   loading,
   hasSettings,
 }) {
@@ -134,6 +135,20 @@ function PostsTable({
                       px={8}
                     >
                       Generate All Comments
+                    </Button>
+                    <Button
+                      colorScheme="orange"
+                      onClick={onReplyAll}
+                      isLoading={loading}
+                      loadingText="Replying..."
+                      size="lg"
+                      rounded="xl"
+                      shadow="md"
+                      _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                      leftIcon={<Box as="span">📤</Box>}
+                      px={8}
+                    >
+                      Reply All
                     </Button>
                   </>
                 )}

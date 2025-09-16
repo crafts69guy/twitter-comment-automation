@@ -116,7 +116,7 @@ function App() {
     setSettings(newSettings);
     localStorage.setItem(
       "twitterAutomationSettings",
-      JSON.stringify(newSettings)
+      JSON.stringify(newSettings),
     );
   };
 
@@ -195,8 +195,8 @@ function App() {
         prevPosts.map((post) =>
           post.id === postId
             ? { ...post, comment: response.data.comment, status: "commented" }
-            : post
-        )
+            : post,
+        ),
       );
 
       toast({
@@ -221,7 +221,7 @@ function App() {
 
   const generateAllComments = async () => {
     const postsWithoutComments = posts.filter(
-      (post) => !post.comment || post.comment.trim() === ""
+      (post) => !post.comment || post.comment.trim() === "",
     );
 
     if (postsWithoutComments.length === 0) {
@@ -237,24 +237,43 @@ function App() {
     setLoading(true);
 
     try {
-      // Generate comments for all posts without comments
-      for (const post of postsWithoutComments) {
-        await generateComment(post.id);
-        // Add small delay between requests to avoid overwhelming the API
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      }
+      // Use bulk generation endpoint - single AI request for all posts
+      const postIds = postsWithoutComments.map((post) => post.id);
+      const response = await axios.post(`${API_URL}/ai/generate-bulk`, {
+        postIds,
+        provider: settings.aiProvider,
+      });
+
+      // Update posts with the bulk generated comments
+      setPosts((prevPosts) =>
+        prevPosts.map((post) => {
+          const generated = response.data.comments.find(
+            (c) => c.postId === post.id,
+          );
+          if (generated) {
+            return {
+              ...post,
+              comment: generated.comment,
+              status: "commented",
+              commentGeneratedAt: new Date().toISOString(),
+            };
+          }
+          return post;
+        }),
+      );
 
       toast({
         title: "Bulk Generation Complete",
-        description: `Generated comments for ${postsWithoutComments.length} posts!`,
+        description: `${response.data.message} (${response.data.stats.generated} comments generated)`,
         status: "success",
         duration: 4000,
       });
-    } catch (_error) {
+    } catch (error) {
       toast({
         title: "Bulk Generation Error",
         description:
-          "Some comments may not have been generated. Please try individual generation.",
+          error.response?.data?.message ||
+          "Failed to generate comments in bulk.",
         status: "error",
         duration: 5000,
       });
@@ -275,11 +294,101 @@ function App() {
       return;
     }
 
-    window.open(post.url, "_blank");
+    try {
+      // Copy comment to clipboard
+      await navigator.clipboard.writeText(post.comment);
 
-    setPosts(
-      posts.map((p) => (p.id === postId ? { ...p, status: "replied" } : p))
+      // Open Twitter post in new tab
+      window.open(post.url, "_blank");
+
+      // Update post status in backend
+      await axios.patch(`${API_URL}/posts/${postId}`, {
+        status: "replied",
+        repliedAt: new Date().toISOString(),
+      });
+
+      // Update local state
+      setPosts(
+        posts.map((p) =>
+          p.id === postId
+            ? { ...p, status: "replied", repliedAt: new Date().toISOString() }
+            : p,
+        ),
+      );
+
+      toast({
+        title: "Ready to Reply!",
+        description:
+          "Comment copied to clipboard. Paste it as a reply on Twitter/X.",
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      // Fallback if clipboard access fails
+      window.open(post.url, "_blank");
+
+      setPosts(
+        posts.map((p) =>
+          p.id === postId
+            ? { ...p, status: "replied", repliedAt: new Date().toISOString() }
+            : p,
+        ),
+      );
+
+      toast({
+        title: "Reply Window Opened",
+        description: `Comment: "${post.comment.substring(0, 100)}${post.comment.length > 100 ? "..." : ""}"`,
+        status: "info",
+        duration: 8000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const replyToAllPosts = async () => {
+    const postsWithComments = posts.filter(
+      (post) =>
+        post.comment && post.comment.trim() !== "" && post.status !== "replied",
     );
+
+    if (postsWithComments.length === 0) {
+      toast({
+        title: "No Posts to Reply",
+        description: "All posts with comments have already been replied to.",
+        status: "info",
+        duration: 3000,
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      // Process each post
+      for (const post of postsWithComments) {
+        await replyToPost(post.id);
+        // Add delay between replies to avoid overwhelming
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      toast({
+        title: "Bulk Reply Complete",
+        description: `Opened ${postsWithComments.length} posts for replying!`,
+        status: "success",
+        duration: 4000,
+      });
+    } catch (error) {
+      toast({
+        title: "Bulk Reply Error",
+        description:
+          "Some posts may not have been processed. Please try individual replies.",
+        status: "error",
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -345,6 +454,7 @@ function App() {
                   onGenerateComment={generateComment}
                   onGenerateAllComments={generateAllComments}
                   onReply={replyToPost}
+                  onReplyAll={replyToAllPosts}
                   loading={loading}
                   hasSettings={!!settings.googleSheetUrl}
                 />
