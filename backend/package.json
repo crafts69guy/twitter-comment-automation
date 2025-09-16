@@ -1,0 +1,25 @@
+{
+  "name": "twitter-comment-backend",
+  "version": "1.0.0",
+  "description": "Backend for Twitter Comment Automation",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "npx nodemon server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "express-session": "^1.18.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "googleapis": "^144.0.0",
+    "puppeteer": "^23.10.4",
+    "openai": "^4.77.0",
+    "@anthropic-ai/sdk": "^0.27.3",
+    "uuid": "^11.0.4"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.9"
+  }
+}
