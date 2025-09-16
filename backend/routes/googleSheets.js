@@ -1,6 +1,6 @@
-import express from 'express';
-import { google } from 'googleapis';
-import { v4 as uuidv4 } from 'uuid';
+import express from "express";
+import { google } from "googleapis";
+import { v4 as uuidv4 } from "uuid";
 
 const router = express.Router();
 
@@ -11,34 +11,35 @@ function extractSheetId(url) {
 }
 
 // Fetch posts from Google Sheets
-router.post('/fetch', async (req, res) => {
+router.post("/fetch", async (req, res) => {
   try {
     const { sheetUrl } = req.body;
 
     if (!sheetUrl) {
       return res.status(400).json({
-        message: 'Google Sheet URL is required'
+        message: "Google Sheet URL is required",
       });
     }
 
     const sheetId = extractSheetId(sheetUrl);
     if (!sheetId) {
       return res.status(400).json({
-        message: 'Invalid Google Sheet URL format'
+        message: "Invalid Google Sheet URL format",
       });
     }
 
     // Real Google Sheets integration using Service Account
     const auth = new google.auth.GoogleAuth({
-      keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './google-credentials.json',
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+      keyFile:
+        process.env.GOOGLE_SERVICE_ACCOUNT_PATH || "./google-credentials.json",
+      scopes: ["https://www.googleapis.com/auth/spreadsheets.readonly"],
     });
 
-    const sheets = google.sheets({ version: 'v4', auth });
+    const sheets = google.sheets({ version: "v4", auth });
 
     const response = await sheets.spreadsheets.values.get({
       spreadsheetId: sheetId,
-      range: 'A:B', // Column A for URLs, Column B for content (optional)
+      range: "A:B", // Column A for URLs, Column B for content (optional)
     });
 
     const rows = response.data.values;
@@ -46,22 +47,25 @@ router.post('/fetch', async (req, res) => {
       return res.json({
         success: true,
         posts: [],
-        message: 'No data found in the spreadsheet'
+        message: "No data found in the spreadsheet",
       });
     }
 
     // Skip header row and process data
     const dataRows = rows.slice(1);
-    const posts = dataRows.map((row, index) => ({
-      id: uuidv4(),
-      url: row[0] || '',
-      content: row[1] || '', // Optional pre-filled content
-      comment: '',
-      status: 'pending'
-    })).filter(post =>
-      post.url &&
-      (post.url.includes('twitter.com') || post.url.includes('x.com'))
-    );
+    const posts = dataRows
+      .map((row) => ({
+        id: uuidv4(),
+        url: row[0] || "",
+        content: row[1] || "", // Optional pre-filled content
+        comment: "",
+        status: "pending",
+      }))
+      .filter(
+        (post) =>
+          post.url &&
+          (post.url.includes("twitter.com") || post.url.includes("x.com")),
+      );
 
     // Store posts in session
     req.userSession.posts = posts;
@@ -69,61 +73,16 @@ router.post('/fetch', async (req, res) => {
     res.json({
       success: true,
       posts,
-      message: `Fetched ${posts.length} posts from Google Sheets`
+      message: `Fetched ${posts.length} posts from Google Sheets`,
     });
-
-    /*
-    // Uncomment for real Google Sheets integration:
-
-    const auth = new google.auth.GoogleAuth({
-      keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_KEY,
-      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
-    });
-
-    const sheets = google.sheets({ version: 'v4', auth });
-
-    const response = await sheets.spreadsheets.values.get({
-      spreadsheetId: sheetId,
-      range: 'A:B', // Column A for URLs, Column B for content (optional)
-    });
-
-    const rows = response.data.values;
-    if (!rows || rows.length === 0) {
-      return res.json({
-        success: true,
-        posts: [],
-        message: 'No data found in the spreadsheet'
-      });
-    }
-
-    const posts = rows.slice(1).map((row, index) => ({
-      id: uuidv4(),
-      url: row[0] || '',
-      content: row[1] || '',
-      comment: '',
-      status: 'pending'
-    })).filter(post => post.url.includes('twitter.com') || post.url.includes('x.com'));
-
-    req.userSession.posts = posts;
-
-    res.json({
-      success: true,
-      posts,
-      message: `Fetched ${posts.length} posts from Google Sheets`
-    });
-    */
-
   } catch (error) {
-    console.error('Google Sheets fetch error:', error);
+    console.error("Google Sheets fetch error:", error);
     res.status(500).json({
-      message: 'Failed to fetch posts from Google Sheets',
-      error: error.message
+      message: "Failed to fetch posts from Google Sheets",
+      error: error.message,
     });
   }
 });
 
-router.get('/test', (req, res) => {
-  res.json({ message: 'Google Sheets route working' });
-});
-
 export default router;
+

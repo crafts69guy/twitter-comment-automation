@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import { useState, useEffect } from "react";
 import {
   Box,
@@ -21,59 +22,58 @@ const API_URL = "http://localhost:3001/api";
 axios.defaults.withCredentials = true;
 
 // Mock data for demonstration
-const mockPosts = [
-  {
-    id: 1,
-    url: "https://twitter.com/elonmusk/status/1234567890",
-    content:
-      "The future of AI is incredibly exciting! We're making great progress with neural networks and machine learning algorithms.",
-    comment:
-      "Absolutely agree! The advancements in AI technology are truly remarkable. Looking forward to seeing how this transforms various industries.",
-    status: "commented",
-  },
-  {
-    id: 2,
-    url: "https://twitter.com/sundarpichai/status/1234567891",
-    content:
-      "Google's latest breakthrough in quantum computing represents a major milestone in computational science.",
-    comment: "",
-    status: "pending",
-  },
-  {
-    id: 3,
-    url: "https://twitter.com/satyanadella/status/1234567892",
-    content:
-      "Microsoft Azure's new AI capabilities are empowering developers worldwide to build more intelligent applications.",
-    comment:
-      "This is fantastic news! Azure's AI tools have been incredibly helpful for our development team. Excited to try the new features.",
-    status: "replied",
-  },
-  {
-    id: 4,
-    url: "https://twitter.com/jeffbezos/status/1234567893",
-    content:
-      "Blue Origin's latest mission was a success! Space exploration continues to push the boundaries of human achievement.",
-    comment:
-      "Congratulations on another successful mission! Space exploration is truly inspiring and opens up so many possibilities for humanity.",
-    status: "commented",
-  },
-  {
-    id: 5,
-    url: "https://twitter.com/tim_cook/status/1234567894",
-    content:
-      "Apple's commitment to privacy and user security remains our top priority as we innovate with new technologies.",
-    comment: "",
-    status: "pending",
-  },
-];
+// const mockPosts = [
+//   {
+//     id: 1,
+//     url: "https://twitter.com/elonmusk/status/1234567890",
+//     content:
+//       "The future of AI is incredibly exciting! We're making great progress with neural networks and machine learning algorithms.",
+//     comment:
+//       "Absolutely agree! The advancements in AI technology are truly remarkable. Looking forward to seeing how this transforms various industries.",
+//     status: "commented",
+//   },
+//   {
+//     id: 2,
+//     url: "https://twitter.com/sundarpichai/status/1234567891",
+//     content:
+//       "Google's latest breakthrough in quantum computing represents a major milestone in computational science.",
+//     comment: "",
+//     status: "pending",
+//   },
+//   {
+//     id: 3,
+//     url: "https://twitter.com/satyanadella/status/1234567892",
+//     content:
+//       "Microsoft Azure's new AI capabilities are empowering developers worldwide to build more intelligent applications.",
+//     comment:
+//       "This is fantastic news! Azure's AI tools have been incredibly helpful for our development team. Excited to try the new features.",
+//     status: "replied",
+//   },
+//   {
+//     id: 4,
+//     url: "https://twitter.com/jeffbezos/status/1234567893",
+//     content:
+//       "Blue Origin's latest mission was a success! Space exploration continues to push the boundaries of human achievement.",
+//     comment:
+//       "Congratulations on another successful mission! Space exploration is truly inspiring and opens up so many possibilities for humanity.",
+//     status: "commented",
+//   },
+//   {
+//     id: 5,
+//     url: "https://twitter.com/tim_cook/status/1234567894",
+//     content:
+//       "Apple's commitment to privacy and user security remains our top priority as we innovate with new technologies.",
+//     comment: "",
+//     status: "pending",
+//   },
+// ];
 
 function App() {
-  const [posts, setPosts] = useState(mockPosts);
+  const [posts, setPosts] = useState([]);
   const [settings, setSettings] = useState({
     googleSheetUrl:
       "https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing",
     aiProvider: "openai",
-    apiKey: "sk-demo1234567890abcdef",
   });
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -81,6 +81,7 @@ function App() {
   useEffect(() => {
     checkHealth();
     loadSavedSettings();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const loadSavedSettings = () => {
@@ -99,7 +100,7 @@ function App() {
     try {
       const response = await axios.get(`${API_URL}/health`);
       console.log("Server health:", response.data);
-    } catch (error) {
+    } catch (_error) {
       toast({
         title: "Server Connection Error",
         description:
@@ -115,7 +116,7 @@ function App() {
     setSettings(newSettings);
     localStorage.setItem(
       "twitterAutomationSettings",
-      JSON.stringify(newSettings),
+      JSON.stringify(newSettings)
     );
   };
 
@@ -152,7 +153,9 @@ function App() {
     setLoading(true);
     try {
       const postIds = posts.map((post) => post.id);
-      const response = await axios.post(`${API_URL}/scraper/scrape-demo`, {
+
+      // Use real scraping endpoint with Puppeteer
+      const response = await axios.post(`${API_URL}/scraper/scrape-posts`, {
         postIds,
       });
 
@@ -161,7 +164,7 @@ function App() {
       setPosts(postsResponse.data.posts);
 
       toast({
-        title: "Content Scraped (Demo Mode)",
+        title: "Content Scraped",
         description: response.data.message,
         status: "success",
         duration: 3000,
@@ -181,33 +184,20 @@ function App() {
 
   const generateComment = async (postId) => {
     try {
-      // Use demo endpoint for contextual comments
-      const response = await axios.post(`${API_URL}/ai/generate-demo`, {
-        postId,
-      });
-
-      // Refresh posts from session to get updated data
-      const postsResponse = await axios.get(`${API_URL}/posts/current`);
-      setPosts(postsResponse.data.posts);
-
-      toast({
-        title: "Comment Generated (Demo Mode)",
-        description:
-          response.data.message || "AI-powered comment generated successfully!",
-        status: "success",
-        duration: 2000,
-      });
-
-      // Uncomment below for real AI integration with OpenAI/Claude:
-      /*
+      // Use real AI endpoint
       const response = await axios.post(`${API_URL}/ai/generate`, {
         postId,
         provider: settings.aiProvider,
-        apiKey: settings.apiKey,
       });
 
-      const postsResponse = await axios.get(`${API_URL}/posts/current`);
-      setPosts(postsResponse.data.posts);
+      // Update the specific post with the generated comment
+      setPosts((prevPosts) =>
+        prevPosts.map((post) =>
+          post.id === postId
+            ? { ...post, comment: response.data.comment, status: "commented" }
+            : post
+        )
+      );
 
       toast({
         title: "Comment Generated",
@@ -215,7 +205,8 @@ function App() {
         status: "success",
         duration: 2000,
       });
-      */
+
+      return response.data.comment; // Return the comment for use in generateAllComments
     } catch (error) {
       toast({
         title: "Error Generating Comment",
@@ -224,12 +215,13 @@ function App() {
         status: "error",
         duration: 5000,
       });
+      return null;
     }
   };
 
   const generateAllComments = async () => {
     const postsWithoutComments = posts.filter(
-      (post) => !post.comment || post.comment.trim() === "",
+      (post) => !post.comment || post.comment.trim() === ""
     );
 
     if (postsWithoutComments.length === 0) {
@@ -258,7 +250,7 @@ function App() {
         status: "success",
         duration: 4000,
       });
-    } catch (error) {
+    } catch (_error) {
       toast({
         title: "Bulk Generation Error",
         description:
@@ -286,7 +278,7 @@ function App() {
     window.open(post.url, "_blank");
 
     setPosts(
-      posts.map((p) => (p.id === postId ? { ...p, status: "replied" } : p)),
+      posts.map((p) => (p.id === postId ? { ...p, status: "replied" } : p))
     );
   };
 
