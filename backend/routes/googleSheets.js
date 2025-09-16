@@ -28,39 +28,48 @@ router.post('/fetch', async (req, res) => {
       });
     }
 
-    // For demo purposes, return mock data
-    // In production, you would use Google Sheets API
-    const mockPosts = [
-      {
-        id: uuidv4(),
-        url: 'https://twitter.com/elonmusk/status/1234567890',
-        content: 'The future of AI is incredibly exciting! We are making great progress with neural networks.',
-        comment: '',
-        status: 'pending'
-      },
-      {
-        id: uuidv4(),
-        url: 'https://twitter.com/sundarpichai/status/1234567891',
-        content: 'Google latest breakthrough in quantum computing represents a major milestone.',
-        comment: '',
-        status: 'pending'
-      },
-      {
-        id: uuidv4(),
-        url: 'https://twitter.com/satyanadella/status/1234567892',
-        content: 'Microsoft Azure new AI capabilities are empowering developers worldwide.',
-        comment: '',
-        status: 'pending'
-      }
-    ];
+    // Real Google Sheets integration using Service Account
+    const auth = new google.auth.GoogleAuth({
+      keyFile: process.env.GOOGLE_SERVICE_ACCOUNT_PATH || './google-credentials.json',
+      scopes: ['https://www.googleapis.com/auth/spreadsheets.readonly'],
+    });
+
+    const sheets = google.sheets({ version: 'v4', auth });
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: 'A:B', // Column A for URLs, Column B for content (optional)
+    });
+
+    const rows = response.data.values;
+    if (!rows || rows.length === 0) {
+      return res.json({
+        success: true,
+        posts: [],
+        message: 'No data found in the spreadsheet'
+      });
+    }
+
+    // Skip header row and process data
+    const dataRows = rows.slice(1);
+    const posts = dataRows.map((row, index) => ({
+      id: uuidv4(),
+      url: row[0] || '',
+      content: row[1] || '', // Optional pre-filled content
+      comment: '',
+      status: 'pending'
+    })).filter(post =>
+      post.url &&
+      (post.url.includes('twitter.com') || post.url.includes('x.com'))
+    );
 
     // Store posts in session
-    req.userSession.posts = mockPosts;
+    req.userSession.posts = posts;
 
     res.json({
       success: true,
-      posts: mockPosts,
-      message: `Fetched ${mockPosts.length} posts from Google Sheets`
+      posts,
+      message: `Fetched ${posts.length} posts from Google Sheets`
     });
 
     /*

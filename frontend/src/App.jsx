@@ -25,44 +25,53 @@ const mockPosts = [
   {
     id: 1,
     url: "https://twitter.com/elonmusk/status/1234567890",
-    content: "The future of AI is incredibly exciting! We're making great progress with neural networks and machine learning algorithms.",
-    comment: "Absolutely agree! The advancements in AI technology are truly remarkable. Looking forward to seeing how this transforms various industries.",
-    status: "commented"
+    content:
+      "The future of AI is incredibly exciting! We're making great progress with neural networks and machine learning algorithms.",
+    comment:
+      "Absolutely agree! The advancements in AI technology are truly remarkable. Looking forward to seeing how this transforms various industries.",
+    status: "commented",
   },
   {
     id: 2,
     url: "https://twitter.com/sundarpichai/status/1234567891",
-    content: "Google's latest breakthrough in quantum computing represents a major milestone in computational science.",
+    content:
+      "Google's latest breakthrough in quantum computing represents a major milestone in computational science.",
     comment: "",
-    status: "pending"
+    status: "pending",
   },
   {
     id: 3,
     url: "https://twitter.com/satyanadella/status/1234567892",
-    content: "Microsoft Azure's new AI capabilities are empowering developers worldwide to build more intelligent applications.",
-    comment: "This is fantastic news! Azure's AI tools have been incredibly helpful for our development team. Excited to try the new features.",
-    status: "replied"
+    content:
+      "Microsoft Azure's new AI capabilities are empowering developers worldwide to build more intelligent applications.",
+    comment:
+      "This is fantastic news! Azure's AI tools have been incredibly helpful for our development team. Excited to try the new features.",
+    status: "replied",
   },
   {
     id: 4,
     url: "https://twitter.com/jeffbezos/status/1234567893",
-    content: "Blue Origin's latest mission was a success! Space exploration continues to push the boundaries of human achievement.",
-    comment: "Congratulations on another successful mission! Space exploration is truly inspiring and opens up so many possibilities for humanity.",
-    status: "commented"
+    content:
+      "Blue Origin's latest mission was a success! Space exploration continues to push the boundaries of human achievement.",
+    comment:
+      "Congratulations on another successful mission! Space exploration is truly inspiring and opens up so many possibilities for humanity.",
+    status: "commented",
   },
   {
     id: 5,
     url: "https://twitter.com/tim_cook/status/1234567894",
-    content: "Apple's commitment to privacy and user security remains our top priority as we innovate with new technologies.",
+    content:
+      "Apple's commitment to privacy and user security remains our top priority as we innovate with new technologies.",
     comment: "",
-    status: "pending"
-  }
+    status: "pending",
+  },
 ];
 
 function App() {
   const [posts, setPosts] = useState(mockPosts);
   const [settings, setSettings] = useState({
-    googleSheetUrl: "https://docs.google.com/spreadsheets/d/1ABC123-example-sheet-id/edit",
+    googleSheetUrl:
+      "https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing",
     aiProvider: "openai",
     apiKey: "sk-demo1234567890abcdef",
   });
@@ -75,13 +84,13 @@ function App() {
   }, []);
 
   const loadSavedSettings = () => {
-    const savedSettings = localStorage.getItem('twitterAutomationSettings');
+    const savedSettings = localStorage.getItem("twitterAutomationSettings");
     if (savedSettings) {
       try {
         const parsedSettings = JSON.parse(savedSettings);
         setSettings(parsedSettings);
       } catch (error) {
-        console.error('Error loading saved settings:', error);
+        console.error("Error loading saved settings:", error);
       }
     }
   };
@@ -119,7 +128,9 @@ function App() {
       setPosts(response.data.posts);
       toast({
         title: "Posts Fetched",
-        description: response.data.message || `Loaded ${response.data.posts.length} posts from Google Sheets`,
+        description:
+          response.data.message ||
+          `Loaded ${response.data.posts.length} posts from Google Sheets`,
         status: "success",
         duration: 3000,
       });
@@ -140,9 +151,9 @@ function App() {
   const scrapeContent = async () => {
     setLoading(true);
     try {
-      const postIds = posts.map(post => post.id);
+      const postIds = posts.map((post) => post.id);
       const response = await axios.post(`${API_URL}/scraper/scrape-demo`, {
-        postIds
+        postIds,
       });
 
       // Refresh posts from the session
@@ -172,7 +183,7 @@ function App() {
     try {
       // Use demo endpoint for contextual comments
       const response = await axios.post(`${API_URL}/ai/generate-demo`, {
-        postId
+        postId,
       });
 
       // Refresh posts from session to get updated data
@@ -181,7 +192,8 @@ function App() {
 
       toast({
         title: "Comment Generated (Demo Mode)",
-        description: response.data.message || "AI-powered comment generated successfully!",
+        description:
+          response.data.message || "AI-powered comment generated successfully!",
         status: "success",
         duration: 2000,
       });
@@ -204,7 +216,6 @@ function App() {
         duration: 2000,
       });
       */
-
     } catch (error) {
       toast({
         title: "Error Generating Comment",
@@ -217,7 +228,9 @@ function App() {
   };
 
   const generateAllComments = async () => {
-    const postsWithoutComments = posts.filter(post => !post.comment || post.comment.trim() === '');
+    const postsWithoutComments = posts.filter(
+      (post) => !post.comment || post.comment.trim() === "",
+    );
 
     if (postsWithoutComments.length === 0) {
       toast({
@@ -236,7 +249,7 @@ function App() {
       for (const post of postsWithoutComments) {
         await generateComment(post.id);
         // Add small delay between requests to avoid overwhelming the API
-        await new Promise(resolve => setTimeout(resolve, 500));
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
       toast({
@@ -248,7 +261,8 @@ function App() {
     } catch (error) {
       toast({
         title: "Bulk Generation Error",
-        description: "Some comments may not have been generated. Please try individual generation.",
+        description:
+          "Some comments may not have been generated. Please try individual generation.",
         status: "error",
         duration: 5000,
       });
@@ -352,4 +366,3 @@ function App() {
 }
 
 export default App;
-
