@@ -73,7 +73,8 @@ function App() {
   const [settings, setSettings] = useState({
     googleSheetUrl:
       "https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing",
-    aiProvider: "openai",
+    aiProvider: "gemini",
+    maxTabs: 5,
   });
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -157,6 +158,7 @@ function App() {
       // Use real scraping endpoint with Puppeteer
       const response = await axios.post(`${API_URL}/scraper/scrape-posts`, {
         postIds,
+        maxTabs: settings.maxTabs || 5,
       });
 
       // Refresh posts from the session
@@ -338,11 +340,109 @@ function App() {
 
       toast({
         title: "Reply Window Opened",
-        description: `Comment: "${post.comment.substring(0, 100)}${post.comment.length > 100 ? "..." : ""}"`,
+        description: `Comment: "${post.comment.substring(0, 100)}${
+          post.comment.length > 100 ? "..." : ""
+        }"`,
         status: "info",
         duration: 8000,
         isClosable: true,
       });
+    }
+  };
+
+  const autoReplyToPost = async (postId) => {
+    const post = posts.find((p) => p.id === postId);
+    if (!post?.comment) {
+      toast({
+        title: "No Comment",
+        description: "Generate a comment first before auto-replying",
+        status: "warning",
+        duration: 3000,
+      });
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await axios.post(`${API_URL}/auto-reply/single`, {
+        postId,
+      });
+
+      if (response.data.success) {
+        // Refresh posts from session
+        const postsResponse = await axios.get(`${API_URL}/posts/current`);
+        setPosts(postsResponse.data.posts);
+
+        toast({
+          title: "Auto-Reply Successful!",
+          description: "Comment posted automatically to Twitter/X.",
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+        });
+      } else {
+        throw new Error(response.data.message || "Auto-reply failed");
+      }
+    } catch (error) {
+      toast({
+        title: "Auto-Reply Failed",
+        description:
+          error.response?.data?.message || "Failed to post reply automatically",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const autoReplyToAllPosts = async () => {
+    const postsWithComments = posts.filter(
+      (post) =>
+        post.comment && post.comment.trim() !== "" && post.status !== "replied",
+    );
+
+    if (postsWithComments.length === 0) {
+      toast({
+        title: "No Posts to Auto-Reply",
+        description: "All posts with comments have already been replied to.",
+        status: "info",
+        duration: 3000,
+      });
+      return;
+    }
+
+    setLoading(true);
+
+    try {
+      const postIds = postsWithComments.map((post) => post.id);
+      const response = await axios.post(`${API_URL}/auto-reply/batch`, {
+        postIds,
+      });
+
+      // Refresh posts from session
+      const postsResponse = await axios.get(`${API_URL}/posts/current`);
+      setPosts(postsResponse.data.posts);
+
+      toast({
+        title: "Auto-Reply All Complete",
+        description: `${response.data.message} (${response.data.stats.successful} successful)`,
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: "Auto-Reply All Failed",
+        description:
+          error.response?.data?.message || "Failed to auto-reply to posts",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -393,7 +493,7 @@ function App() {
 
   return (
     <Box bg="gray.50" minH="100vh" minW="100vw">
-      <Container maxW="container.xl" py={8}>
+      <Container width="100%" maxW="100%" py={8}>
         <VStack spacing={8} align="stretch">
           <Box textAlign="center" mb={6}>
             <Heading size="2xl" mb={4} color="blue.600" fontWeight="bold">
@@ -455,6 +555,8 @@ function App() {
                   onGenerateAllComments={generateAllComments}
                   onReply={replyToPost}
                   onReplyAll={replyToAllPosts}
+                  onAutoReply={autoReplyToPost}
+                  onAutoReplyAll={autoReplyToAllPosts}
                   loading={loading}
                   hasSettings={!!settings.googleSheetUrl}
                 />

@@ -17,14 +17,14 @@ async function scrapeTwitterPost(url, page) {
     // Extract tweet content
     const tweetData = await page.evaluate(() => {
       const tweetTextElement = document.querySelector(
-        '[data-testid="tweetText"]',
+        '[data-testid="tweetText"]'
       );
       const authorElement = document.querySelector(
-        '[data-testid="User-Name"] span',
+        '[data-testid="User-Name"] span'
       );
       const likesElement = document.querySelector('[data-testid="like"] span');
       const retweetsElement = document.querySelector(
-        '[data-testid="retweet"] span',
+        '[data-testid="retweet"] span'
       );
 
       return {
@@ -56,7 +56,7 @@ async function scrapeTwitterPost(url, page) {
 
 // Scrape multiple Twitter posts in parallel using service
 router.post("/scrape-posts", async (req, res) => {
-  const { postIds } = req.body;
+  const { postIds, maxTabs } = req.body;
 
   if (!postIds || !Array.isArray(postIds)) {
     return res.status(400).json({
@@ -80,8 +80,8 @@ router.post("/scrape-posts", async (req, res) => {
     // Extract URLs for scraping
     const urls = postsToScrape.map((post) => post.url);
 
-    // Use puppeteer service to scrape in parallel batches
-    const scrapedData = await puppeteerService.scrapeBatch(urls);
+    // Use puppeteer service to scrape in parallel batches with configurable maxTabs
+    const scrapedData = await puppeteerService.scrapeBatch(urls, maxTabs || 5);
 
     // Update posts in session with scraped content
     req.userSession.posts = req.userSession.posts.map((post) => {
@@ -221,4 +221,3 @@ router.post("/scrape-posts", async (req, res) => {
 // });
 
 export default router;
-

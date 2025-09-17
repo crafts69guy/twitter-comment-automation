@@ -7,6 +7,7 @@ import googleSheetsRouter from "./routes/googleSheets.js";
 import scraperRouter from "./routes/scraper.js";
 import aiRouter from "./routes/ai.js";
 import postsRouter from "./routes/posts.js";
+import autoReplyRouter from "./routes/autoReply.js";
 
 dotenv.config();
 
@@ -17,7 +18,7 @@ app.use(
   cors({
     origin: "http://localhost:5173",
     credentials: true,
-  }),
+  })
 );
 
 app.use(express.json());
@@ -34,7 +35,7 @@ app.use(
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000,
     },
-  }),
+  })
 );
 
 const sessions = {};
@@ -62,6 +63,7 @@ app.use("/api/google-sheets", googleSheetsRouter);
 app.use("/api/scraper", scraperRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/posts", postsRouter);
+app.use("/api/auto-reply", autoReplyRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", sessionId: req.session.userId });
@@ -70,4 +72,3 @@ app.get("/api/health", (req, res) => {
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
-

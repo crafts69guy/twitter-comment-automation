@@ -3,20 +3,25 @@ import puppeteer from "puppeteer";
 class PuppeteerService {
   constructor() {
     this.browser = null;
-    this.maxTabs = 5;
+    this.defaultMaxTabs = 5;
   }
 
   async initialize() {
     if (!this.browser) {
       this.browser = await puppeteer.launch({
-        headless: process.env.PUPPETEER_HEADLESS === "true",
+        headless: false, // Open real browser window
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas",
-          "--disable-gpu",
+          "--disable-blink-features=AutomationControlled", // Hide automation
+          "--disable-features=site-per-process", // Better performance
+          "--window-size=1920,1080", // Set initial window size
+          "--start-maximized", // Start maximized
         ],
+        defaultViewport: null, // Use full browser window
+        executablePath: puppeteer.executablePath(), // Use installed Chrome
+        ignoreDefaultArgs: ["--enable-automation"], // Remove automation flag
       });
     }
     return this.browser;
@@ -202,13 +207,16 @@ class PuppeteerService {
     }
   }
 
-  async scrapeBatch(urls) {
+  async scrapeBatch(urls, maxTabs = null) {
     await this.initialize();
 
-    // Process URLs in batches of maxTabs
+    // Use provided maxTabs or default
+    const tabLimit = maxTabs || this.defaultMaxTabs;
+
+    // Process URLs in batches of tabLimit
     const results = [];
-    for (let i = 0; i < urls.length; i += this.maxTabs) {
-      const batch = urls.slice(i, i + this.maxTabs);
+    for (let i = 0; i < urls.length; i += tabLimit) {
+      const batch = urls.slice(i, i + tabLimit);
 
       // Create pages for parallel processing
       const pagePromises = batch.map(async (url) => {
@@ -261,9 +269,196 @@ class PuppeteerService {
       results.push(...batchResults);
 
       // Add delay between batches to avoid rate limiting
-      if (i + this.maxTabs < urls.length) {
+      if (i + tabLimit < urls.length) {
         await new Promise((resolve) => setTimeout(resolve, 2000));
       }
+    }
+
+    return results;
+  }
+
+  async autoReply(url, comment) {
+    let page = null;
+    try {
+      await this.initialize();
+
+      page = await this.browser.newPage();
+
+      // Set viewport to desktop size
+      await page.setViewport({ width: 1920, height: 1080 });
+
+      // Set user agent
+      await page.setUserAgent(
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      );
+
+      // Navigate to the tweet
+      await page.goto(url, {
+        waitUntil: "networkidle2",
+        timeout: 30000,
+      });
+
+      // Wait for page to load
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      // Try to find and click the reply button
+      const replySelectors = [
+        '[data-testid="reply"]',
+        '[aria-label*="Reply"]',
+        '[aria-label*="reply"]',
+        'div[role="button"][aria-label*="Reply"]',
+      ];
+
+      let replyClicked = false;
+      for (const selector of replySelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+          await page.click(selector);
+          replyClicked = true;
+          console.log(`Reply button clicked using selector: ${selector}`);
+          break;
+        } catch (error) {
+          console.log(`Failed to click reply with selector ${selector}`);
+          continue;
+        }
+      }
+
+      if (!replyClicked) {
+        throw new Error("Could not find reply button");
+      }
+
+      // Wait for the reply text area to appear
+      await new Promise((resolve) => setTimeout(resolve, 2000));
+
+      // Try to find the text input area
+      const textAreaSelectors = [
+        '[data-testid="tweetTextarea_0"]',
+        'div[role="textbox"][data-testid*="tweet"]',
+        'div[role="textbox"]',
+        '[contenteditable="true"]',
+        'div[data-testid="tweetTextarea_0_label"]',
+      ];
+
+      let textAreaFound = false;
+      for (const selector of textAreaSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+
+          // Clear any existing text and type the comment
+          await page.click(selector);
+          await page.keyboard.down("Control");
+          await page.keyboard.press("KeyA");
+          await page.keyboard.up("Control");
+          await page.keyboard.press("Delete");
+
+          // Type the comment
+          await page.type(selector, comment);
+          textAreaFound = true;
+          console.log(`Comment typed using selector: ${selector}`);
+          break;
+        } catch (error) {
+          console.log(`Failed to type in textarea with selector ${selector}`);
+          continue;
+        }
+      }
+
+      if (!textAreaFound) {
+        throw new Error("Could not find text input area");
+      }
+
+      // Wait a moment for the text to be processed
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+
+      // Try to find and click the reply/tweet button
+      const submitSelectors = [
+        '[data-testid="tweetButtonInline"]',
+        '[data-testid="tweetButton"]',
+        'div[role="button"][data-testid="tweetButtonInline"]',
+        'div[role="button"]:has-text("Reply")',
+        'button:has-text("Reply")',
+      ];
+
+      let submitClicked = false;
+      for (const selector of submitSelectors) {
+        try {
+          await page.waitForSelector(selector, { timeout: 5000 });
+
+          // Check if button is enabled
+          const isDisabled = await page.$eval(
+            selector,
+            (el) =>
+              el.hasAttribute("disabled") ||
+              el.getAttribute("aria-disabled") === "true"
+          );
+
+          if (!isDisabled) {
+            await page.click(selector);
+            submitClicked = true;
+            console.log(`Submit button clicked using selector: ${selector}`);
+            break;
+          }
+        } catch (error) {
+          console.log(`Failed to click submit with selector ${selector}`);
+          continue;
+        }
+      }
+
+      if (!submitClicked) {
+        console.log(
+          "Submit button not found or disabled, reply may still be successful"
+        );
+      }
+
+      // Wait to see if reply was successful
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+
+      return {
+        success: true,
+        message: "Reply posted successfully",
+      };
+    } catch (error) {
+      console.error(`Error auto-replying to ${url}:`, error.message);
+      return {
+        success: false,
+        error: error.message,
+      };
+    } finally {
+      if (page) {
+        try {
+          await page.close();
+        } catch (closeError) {
+          console.error("Error closing page:", closeError.message);
+        }
+      }
+    }
+  }
+
+  async autoReplyBatch(posts) {
+    const results = [];
+
+    for (const post of posts) {
+      if (!post.comment || post.comment.trim() === "") {
+        results.push({
+          postId: post.id,
+          url: post.url,
+          success: false,
+          error: "No comment available",
+        });
+        continue;
+      }
+
+      console.log(`Auto-replying to: ${post.url}`);
+      const result = await this.autoReply(post.url, post.comment);
+
+      results.push({
+        postId: post.id,
+        url: post.url,
+        comment: post.comment,
+        ...result,
+      });
+
+      // Add delay between replies to avoid rate limiting
+      await new Promise((resolve) => setTimeout(resolve, 5000));
     }
 
     return results;

@@ -33,6 +33,8 @@ function PostsTable({
   onGenerateAllComments,
   onReply,
   onReplyAll,
+  onAutoReply,
+  onAutoReplyAll,
   loading,
   hasSettings,
 }) {
@@ -149,6 +151,20 @@ function PostsTable({
                       px={8}
                     >
                       Reply All
+                    </Button>
+                    <Button
+                      colorScheme="red"
+                      onClick={onAutoReplyAll}
+                      isLoading={loading}
+                      loadingText="Auto-Replying..."
+                      size="lg"
+                      rounded="xl"
+                      shadow="md"
+                      _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                      leftIcon={<Box as="span">🤖</Box>}
+                      px={8}
+                    >
+                      Auto Reply All
                     </Button>
                   </>
                 )}
@@ -387,18 +403,32 @@ function PostsTable({
 
                                 {post?.comment &&
                                   post?.status !== "replied" && (
-                                    <Tooltip label="Reply to post" hasArrow>
-                                      <IconButton
-                                        aria-label="Reply to post"
-                                        icon={<CheckIcon />}
-                                        size="md"
-                                        colorScheme="green"
-                                        variant="solid"
-                                        rounded="lg"
-                                        onClick={() => onReply(post?.id)}
-                                        _hover={{ transform: "scale(1.05)" }}
-                                      />
-                                    </Tooltip>
+                                    <>
+                                      <Tooltip label="Manual reply (copy to clipboard)" hasArrow>
+                                        <IconButton
+                                          aria-label="Reply to post"
+                                          icon={<CheckIcon />}
+                                          size="md"
+                                          colorScheme="green"
+                                          variant="solid"
+                                          rounded="lg"
+                                          onClick={() => onReply(post?.id)}
+                                          _hover={{ transform: "scale(1.05)" }}
+                                        />
+                                      </Tooltip>
+                                      <Tooltip label="Auto-reply (automated posting)" hasArrow>
+                                        <IconButton
+                                          aria-label="Auto-reply to post"
+                                          icon={<Box as="span">🤖</Box>}
+                                          size="md"
+                                          colorScheme="red"
+                                          variant="solid"
+                                          rounded="lg"
+                                          onClick={() => onAutoReply(post?.id)}
+                                          _hover={{ transform: "scale(1.05)" }}
+                                        />
+                                      </Tooltip>
+                                    </>
                                   )}
                               </VStack>
                             </Td>

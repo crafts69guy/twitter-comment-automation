@@ -9,10 +9,14 @@ import {
   VStack,
   Card,
   CardBody,
-  CardHeader,
   Heading,
   Text,
   useToast,
+  NumberInput,
+  NumberInputField,
+  NumberInputStepper,
+  NumberIncrementStepper,
+  NumberDecrementStepper,
 } from "@chakra-ui/react";
 
 function Settings({ settings, onUpdate }) {
@@ -137,11 +141,55 @@ function Settings({ settings, onUpdate }) {
                       fontSize="md"
                       fontWeight="medium"
                     >
+                      <option value="gemini">✨ Google Gemini</option>
                       <option value="openai">🚀 OpenAI (GPT-4)</option>
                       <option value="anthropic">🧠 Anthropic (Claude)</option>
-                      <option value="gemini">✨ Google Gemini</option>
                     </Select>
                   </FormControl>
+
+                  <FormControl>
+                    <FormLabel
+                      fontSize="xl"
+                      fontWeight="bold"
+                      color="gray.700"
+                      mb={4}
+                    >
+                      🚀 Max Parallel Tabs
+                    </FormLabel>
+                    <NumberInput
+                      value={localSettings.maxTabs || 5}
+                      onChange={(_valueString, valueNumber) =>
+                        handleInputChange("maxTabs", valueNumber)
+                      }
+                      min={1}
+                      max={20}
+                      size="lg"
+                    >
+                      <NumberInputField
+                        rounded="xl"
+                        bg="white"
+                        border="2px"
+                        borderColor="blue.200"
+                        _hover={{ borderColor: "blue.300" }}
+                        _focus={{
+                          borderColor: "blue.400",
+                          boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                        }}
+                        py={6}
+                        fontSize="md"
+                        fontWeight="medium"
+                      />
+                      <NumberInputStepper>
+                        <NumberIncrementStepper />
+                        <NumberDecrementStepper />
+                      </NumberInputStepper>
+                    </NumberInput>
+                    <Text fontSize="md" color="gray.500" mt={3} pl={2}>
+                      💡 Number of Puppeteer tabs to use for parallel scraping
+                      (1-20)
+                    </Text>
+                  </FormControl>
+
                   <Text fontSize="md" color="gray.500" mt={3} pl={2}>
                     🔒 API keys are configured securely on the server
                   </Text>
