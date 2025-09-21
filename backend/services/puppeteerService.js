@@ -1,30 +1,121 @@
 import puppeteer from "puppeteer";
+import fs from "fs";
 
 class PuppeteerService {
   constructor() {
     this.browser = null;
     this.defaultMaxTabs = 5;
+    this.activeTabs = new Map(); // Track active tabs by URL
   }
 
   async initialize() {
     if (!this.browser) {
+      // Path to real Google Chrome on different platforms
+      let chromePath;
+
+      if (process.platform === "darwin") {
+        // macOS
+        chromePath =
+          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+      } else if (process.platform === "win32") {
+        // Windows
+        chromePath =
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
+        // Alternative Windows path
+        if (!fs.existsSync(chromePath)) {
+          chromePath =
+            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe";
+        }
+      } else {
+        // Linux
+        chromePath = "/usr/bin/google-chrome";
+        // Alternative Linux paths
+        if (!fs.existsSync(chromePath)) {
+          chromePath = "/usr/bin/google-chrome-stable";
+        }
+      }
+
+      // Check if Chrome exists
+      if (!fs.existsSync(chromePath)) {
+        console.log("Google Chrome not found at:", chromePath);
+        console.log("Using Puppeteer's bundled Chromium instead");
+        chromePath = undefined; // Will use bundled Chromium
+      } else {
+        console.log("Using real Google Chrome from:", chromePath);
+      }
+
       this.browser = await puppeteer.launch({
-        headless: false, // Open real browser window
+        headless: false, // Open visible browser window
+        channel: chromePath ? undefined : "chrome", // Try to find Chrome automatically if path not found
+        executablePath: chromePath, // Use real Chrome if found
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
           "--disable-blink-features=AutomationControlled", // Hide automation
-          "--disable-features=site-per-process", // Better performance
           "--window-size=1920,1080", // Set initial window size
           "--start-maximized", // Start maximized
+          "--disable-web-security",
+          "--disable-features=IsolateOrigins,site-per-process",
+          "--allow-running-insecure-content",
+          "--no-first-run",
+          "--no-default-browser-check",
+          "--disable-infobars", // Remove "controlled by automated test" bar
+          "--exclude-switches=enable-automation",
+          "--enable-features=NetworkService,NetworkServiceInProcess",
+          "--disable-background-timer-throttling",
+          "--disable-backgrounding-occluded-windows",
+          "--disable-renderer-backgrounding",
+          "--disable-features=TranslateUI",
+          "--disable-ipc-flooding-protection",
+          "--user-data-dir=/tmp/chrome-testing", // Use a custom profile directory
         ],
         defaultViewport: null, // Use full browser window
-        executablePath: puppeteer.executablePath(), // Use installed Chrome
-        ignoreDefaultArgs: ["--enable-automation"], // Remove automation flag
+        ignoreDefaultArgs: [
+          "--enable-automation",
+          "--enable-blink-features=AutomationControlled",
+        ], // Remove automation flags
+        ignoreHTTPSErrors: true,
       });
+
+      console.log("Browser opened successfully");
     }
     return this.browser;
+  }
+
+  async getOrCreateTab(url) {
+    await this.initialize();
+
+    // Check if we already have a tab for this URL or similar
+    const baseUrl = url.split("?")[0]; // Remove query parameters for comparison
+
+    if (this.activeTabs.has(baseUrl)) {
+      const existingPage = this.activeTabs.get(baseUrl);
+      try {
+        // Check if the tab is still valid
+        await existingPage.evaluate(() => window.location.href);
+        console.log(`Reusing existing tab for: ${baseUrl}`);
+        return existingPage;
+      } catch (error) {
+        // Tab is closed or invalid, remove from map
+        this.activeTabs.delete(baseUrl);
+      }
+    }
+
+    // Create new tab
+    const page = await this.browser.newPage();
+
+    // Set user agent to avoid detection
+    await page.setUserAgent(
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    );
+
+    // Set viewport to desktop size
+    await page.setViewport({ width: 1920, height: 1080 });
+
+    this.activeTabs.set(baseUrl, page);
+    console.log(`Created new tab for: ${baseUrl}`);
+    return page;
   }
 
   async scrapeTweet(url, page) {
@@ -279,34 +370,30 @@ class PuppeteerService {
 
   async autoReply(url, comment) {
     let page = null;
+    let isNewTab = false;
     try {
-      await this.initialize();
+      // Get or reuse existing tab for this URL
+      page = await this.getOrCreateTab(url);
+      const currentUrl = await page.evaluate(() => window.location.href);
 
-      page = await this.browser.newPage();
-
-      // Set viewport to desktop size
-      await page.setViewport({ width: 1920, height: 1080 });
-
-      // Set user agent
-      await page.setUserAgent(
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
-      );
-
-      // Navigate to the tweet
-      await page.goto(url, {
-        waitUntil: "networkidle2",
-        timeout: 30000,
-      });
+      // Only navigate if we're not already on the right page
+      if (!currentUrl.includes(url.split("/").pop())) {
+        console.log(`Navigating to: ${url}`);
+        await page.goto(url, {
+          waitUntil: "networkidle2",
+          timeout: 30000,
+        });
+        isNewTab = true;
+      } else {
+        console.log(`Already on the correct page: ${url}`);
+      }
 
       // Wait for page to load
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
       // Try to find and click the reply button
       const replySelectors = [
-        '[data-testid="reply"]',
-        '[aria-label*="Reply"]',
-        '[aria-label*="reply"]',
-        'div[role="button"][aria-label*="Reply"]',
+        '[data-testid="tweetTextarea_0"][role="textbox"]',
       ];
 
       let replyClicked = false;
@@ -327,79 +414,92 @@ class PuppeteerService {
         throw new Error("Could not find reply button");
       }
 
-      // Wait for the reply text area to appear
-      await new Promise((resolve) => setTimeout(resolve, 2000));
+      // Wait longer for the reply modal to fully load
+      await new Promise((resolve) => setTimeout(resolve, 3000));
 
-      // Try to find the text input area
-      const textAreaSelectors = [
-        '[data-testid="tweetTextarea_0"]',
-        'div[role="textbox"][data-testid*="tweet"]',
-        'div[role="textbox"]',
-        '[contenteditable="true"]',
-        'div[data-testid="tweetTextarea_0_label"]',
-      ];
+      try {
+        // await element.click();
+        await new Promise((resolve) => setTimeout(resolve, 500));
 
-      let textAreaFound = false;
-      for (const selector of textAreaSelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000 });
-
-          // Clear any existing text and type the comment
-          await page.click(selector);
-          await page.keyboard.down("Control");
-          await page.keyboard.press("KeyA");
-          await page.keyboard.up("Control");
-          await page.keyboard.press("Delete");
-
-          // Type the comment
-          await page.type(selector, comment);
-          textAreaFound = true;
-          console.log(`Comment typed using selector: ${selector}`);
-          break;
-        } catch (error) {
-          console.log(`Failed to type in textarea with selector ${selector}`);
-          continue;
+        // Type the comment character by character
+        for (const char of comment) {
+          await page.keyboard.type(char, { delay: 30 });
         }
+
+        console.log(`Comment typed successfully`);
+      } catch (error) {
+        console.log(`Failed with selector ${selector}: ${error.message}`);
       }
 
-      if (!textAreaFound) {
-        throw new Error("Could not find text input area");
-      }
-
-      // Wait a moment for the text to be processed
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-
-      // Try to find and click the reply/tweet button
-      const submitSelectors = [
-        '[data-testid="tweetButtonInline"]',
-        '[data-testid="tweetButton"]',
-        'div[role="button"][data-testid="tweetButtonInline"]',
-        'div[role="button"]:has-text("Reply")',
-        'button:has-text("Reply")',
-      ];
+      const submitSelectors = ['button[data-testid="tweetButtonInline"]'];
 
       let submitClicked = false;
-      for (const selector of submitSelectors) {
+
+      // Wait for the button to become enabled (check modal button first, then inline)
+      let buttonEnabled = false;
+      for (let i = 0; i < 15; i++) {
         try {
-          await page.waitForSelector(selector, { timeout: 5000 });
+          let button = await page.$('button[data-testid="tweetButtonInline"]');
+          let buttonSelector = 'button[data-testid="tweetButtonInline"]';
 
-          // Check if button is enabled
-          const isDisabled = await page.$eval(
-            selector,
-            (el) =>
-              el.hasAttribute("disabled") ||
-              el.getAttribute("aria-disabled") === "true"
-          );
+          if (button) {
+            const isDisabled = await page.$eval(
+              buttonSelector,
+              (el) =>
+                el.hasAttribute("disabled") ||
+                el.getAttribute("aria-disabled") === "true"
+            );
 
-          if (!isDisabled) {
-            await page.click(selector);
-            submitClicked = true;
-            console.log(`Submit button clicked using selector: ${selector}`);
-            break;
+            if (!isDisabled) {
+              buttonEnabled = true;
+              console.log(
+                `Reply button is now enabled using selector: ${buttonSelector}`
+              );
+              break;
+            } else {
+              console.log(`Button found but still disabled: ${buttonSelector}`);
+            }
+          } else {
+            console.log(`No reply button found yet, attempt ${i + 1}`);
           }
-        } catch (error) {
-          console.log(`Failed to click submit with selector ${selector}`);
-          continue;
+        } catch (e) {
+          console.log(`Error checking button: ${e.message}`);
+        }
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+
+      if (buttonEnabled) {
+        for (const selector of submitSelectors) {
+          try {
+            const button = await page.$(selector);
+            if (button) {
+              // Double-check that the button is actually enabled before clicking
+              const isActuallyDisabled = await page
+                .$eval(
+                  selector,
+                  (el) =>
+                    el.hasAttribute("disabled") ||
+                    el.getAttribute("aria-disabled") === "true"
+                )
+                .catch(() => true); // If eval fails, assume disabled
+
+              if (!isActuallyDisabled) {
+                await button.click();
+                submitClicked = true;
+                console.log(
+                  `Submit button clicked using selector: ${selector}`
+                );
+                break;
+              } else {
+                console.log(`Button found but disabled, skipping: ${selector}`);
+              }
+            }
+          } catch (error) {
+            console.log(
+              `Failed to click submit with selector ${selector}: ${error.message}`
+            );
+            continue;
+          }
         }
       }
 
@@ -423,13 +523,9 @@ class PuppeteerService {
         error: error.message,
       };
     } finally {
-      if (page) {
-        try {
-          await page.close();
-        } catch (closeError) {
-          console.error("Error closing page:", closeError.message);
-        }
-      }
+      // Don't close the tab - keep it open for reuse
+      // The tab will be managed by the activeTabs Map
+      console.log("Keeping tab open for future reuse");
     }
   }
 
@@ -464,7 +560,21 @@ class PuppeteerService {
     return results;
   }
 
+  async closeAllTabs() {
+    console.log("Closing all active tabs...");
+    for (const [url, page] of this.activeTabs) {
+      try {
+        await page.close();
+        console.log(`Closed tab for: ${url}`);
+      } catch (error) {
+        console.error(`Error closing tab for ${url}:`, error.message);
+      }
+    }
+    this.activeTabs.clear();
+  }
+
   async close() {
+    await this.closeAllTabs();
     if (this.browser) {
       await this.browser.close();
       this.browser = null;

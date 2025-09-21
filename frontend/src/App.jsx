@@ -75,6 +75,8 @@ function App() {
       "https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing",
     aiProvider: "gemini",
     maxTabs: 5,
+    commentMaxLength: 280,
+    additionalPrompt: "",
   });
   const [loading, setLoading] = useState(false);
   const toast = useToast();
@@ -190,6 +192,8 @@ function App() {
       const response = await axios.post(`${API_URL}/ai/generate`, {
         postId,
         provider: settings.aiProvider,
+        maxLength: settings.commentMaxLength || 280,
+        additionalPrompt: settings.additionalPrompt || "",
       });
 
       // Update the specific post with the generated comment
@@ -244,6 +248,8 @@ function App() {
       const response = await axios.post(`${API_URL}/ai/generate-bulk`, {
         postIds,
         provider: settings.aiProvider,
+        maxLength: settings.commentMaxLength || 280,
+        additionalPrompt: settings.additionalPrompt || "",
       });
 
       // Update posts with the bulk generated comments

@@ -17,6 +17,7 @@ import {
   NumberInputStepper,
   NumberIncrementStepper,
   NumberDecrementStepper,
+  Textarea,
 } from "@chakra-ui/react";
 
 function Settings({ settings, onUpdate }) {
@@ -187,6 +188,84 @@ function Settings({ settings, onUpdate }) {
                     <Text fontSize="md" color="gray.500" mt={3} pl={2}>
                       💡 Number of Puppeteer tabs to use for parallel scraping
                       (1-20)
+                    </Text>
+                  </FormControl>
+
+                  <FormControl>
+                    <FormLabel
+                      fontSize="xl"
+                      fontWeight="bold"
+                      color="gray.700"
+                      mb={4}
+                    >
+                      ✏️ Comment Character Limit
+                    </FormLabel>
+                    <NumberInput
+                      value={localSettings.commentMaxLength || 280}
+                      onChange={(_valueString, valueNumber) =>
+                        handleInputChange("commentMaxLength", valueNumber)
+                      }
+                      min={1}
+                      size="lg"
+                    >
+                      <NumberInputField
+                        rounded="xl"
+                        bg="white"
+                        border="2px"
+                        borderColor="blue.200"
+                        _hover={{ borderColor: "blue.300" }}
+                        _focus={{
+                          borderColor: "blue.400",
+                          boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                        }}
+                        py={6}
+                        fontSize="md"
+                        fontWeight="medium"
+                      />
+                      <NumberInputStepper>
+                        <NumberIncrementStepper />
+                        <NumberDecrementStepper />
+                      </NumberInputStepper>
+                    </NumberInput>
+                    <Text fontSize="md" color="gray.500" mt={3} pl={2}>
+                      💡 Maximum characters for AI-generated comments. Default:
+                      280
+                    </Text>
+                  </FormControl>
+
+                  <FormControl>
+                    <FormLabel
+                      fontSize="xl"
+                      fontWeight="bold"
+                      color="gray.700"
+                      mb={4}
+                    >
+                      📝 Additional AI Instructions
+                    </FormLabel>
+                    <Textarea
+                      placeholder="e.g., Be friendly and professional. Include emojis. Ask questions to encourage engagement."
+                      value={localSettings.additionalPrompt || ""}
+                      onChange={(e) =>
+                        handleInputChange("additionalPrompt", e.target.value)
+                      }
+                      size="lg"
+                      rounded="xl"
+                      bg="white"
+                      border="2px"
+                      borderColor="blue.200"
+                      _hover={{ borderColor: "blue.300" }}
+                      _focus={{
+                        borderColor: "blue.400",
+                        boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                      }}
+                      py={4}
+                      fontSize="md"
+                      rows={4}
+                      resize="vertical"
+                    />
+                    <Text fontSize="md" color="gray.500" mt={3} pl={2}>
+                      💡 Additional instructions for AI when generating comments
+                      (optional)
                     </Text>
                   </FormControl>
 

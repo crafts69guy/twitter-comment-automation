@@ -8,7 +8,7 @@ const router = express.Router();
 // Generate AI comment for a specific post
 router.post("/generate", async (req, res) => {
   try {
-    const { postId, provider } = req.body;
+    const { postId, provider, maxLength, additionalPrompt } = req.body;
 
     if (!postId || !provider) {
       return res.status(400).json({
@@ -49,11 +49,26 @@ router.post("/generate", async (req, res) => {
     let generatedComment;
 
     if (provider === "openai") {
-      generatedComment = await generateOpenAIComment(post, apiKey);
+      generatedComment = await generateOpenAIComment(
+        post,
+        apiKey,
+        maxLength,
+        additionalPrompt,
+      );
     } else if (provider === "anthropic") {
-      generatedComment = await generateAnthropicComment(post, apiKey);
+      generatedComment = await generateAnthropicComment(
+        post,
+        apiKey,
+        maxLength,
+        additionalPrompt,
+      );
     } else if (provider === "gemini") {
-      generatedComment = await generateGeminiComment(post, apiKey);
+      generatedComment = await generateGeminiComment(
+        post,
+        apiKey,
+        maxLength,
+        additionalPrompt,
+      );
     } else {
       return res.status(400).json({
         message: 'Invalid AI provider. Use "openai", "anthropic", or "gemini"',
@@ -83,23 +98,38 @@ router.post("/generate", async (req, res) => {
 });
 
 // Generate comment using OpenAI
-async function generateOpenAIComment(post, apiKey) {
+async function generateOpenAIComment(
+  post,
+  apiKey,
+  maxLength = 280,
+  additionalPrompt = "",
+  retryCount = 0,
+) {
   const openai = new OpenAI({
     apiKey: apiKey,
   });
+
+  const charLimit = Math.min(maxLength || 280, 280); // Never exceed Twitter's 280 char limit
+  const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : "";
+
+  // Add stronger brevity instructions on retry
+  const retryInstructions =
+    retryCount > 0
+      ? `\n- EXTREMELY IMPORTANT: Keep response very brief and concise\n- Use shorter sentences and fewer words\n- Aim for ${Math.max(charLimit - 20, 20)} characters or less`
+      : "";
 
   const prompt = `Generate a thoughtful, engaging Twitter reply to this post. The reply should be:
 - Professional and respectful
 - Add value to the conversation
 - Be authentic and human-like
-- 2-3 sentences maximum
+- 🚨 CRITICAL: MUST be under ${charLimit} characters total (count carefully!)
 - Include relevant insights or questions
-- Avoid generic responses
+- Avoid generic responses${customInstructions}${retryInstructions}
 
 Original post by ${post.author || "Unknown"}:
 "${post.content}"
 
-Generate only the reply text, no quotes or extra formatting:`;
+Generate only the reply text, no quotes or extra formatting. MUST be under ${charLimit} characters:`;
 
   const response = await openai.chat.completions.create({
     model: "gpt-4",
@@ -107,42 +137,90 @@ Generate only the reply text, no quotes or extra formatting:`;
       {
         role: "system",
         content:
-          "You are a helpful social media assistant that generates thoughtful, engaging Twitter replies. Be professional, authentic, and add value to conversations.",
+          "You are a helpful social media assistant that generates thoughtful, engaging Twitter replies. Be professional, authentic, and add value to conversations. NEVER exceed the character limit. Be extremely concise.",
       },
       {
         role: "user",
         content: prompt,
       },
     ],
-    max_tokens: 280,
+    max_tokens: Math.ceil(charLimit * 1.5), // Allow some buffer for generation
     temperature: 0.7,
   });
 
-  return response.choices[0].message.content.trim();
+  let comment = response.choices[0].message.content.trim();
+
+  // Check character limit and retry if exceeded (max 2 retries)
+  if (comment.length > charLimit && retryCount < 2) {
+    console.log(
+      `⚠️ Comment too long (${comment.length} chars), retrying attempt ${retryCount + 1}/2 with stricter instructions...`,
+    );
+    return await generateOpenAIComment(
+      post,
+      apiKey,
+      maxLength,
+      additionalPrompt,
+      retryCount + 1,
+    );
+  }
+
+  // If still over limit after retries, throw error
+  if (comment.length > charLimit) {
+    throw new Error(
+      `Generated comment (${comment.length} chars) still exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts. Please reduce the character limit.`,
+    );
+  }
+
+  // Double-check against Twitter's absolute maximum
+  if (comment.length > 280) {
+    throw new Error(
+      `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+    );
+  }
+
+  console.log(
+    `✅ Comment generated successfully (${comment.length}/${charLimit} chars)${retryCount > 0 ? ` after ${retryCount + 1} attempts` : ""}`,
+  );
+  return comment;
 }
 
 // Generate comment using Anthropic Claude
-async function generateAnthropicComment(post, apiKey) {
+async function generateAnthropicComment(
+  post,
+  apiKey,
+  maxLength = 280,
+  additionalPrompt = "",
+  retryCount = 0,
+) {
   const anthropic = new Anthropic({
     apiKey: apiKey,
   });
+
+  const charLimit = Math.min(maxLength || 280, 280); // Never exceed Twitter's 280 char limit
+  const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : "";
+
+  // Add stronger brevity instructions on retry
+  const retryInstructions =
+    retryCount > 0
+      ? `\n- EXTREMELY IMPORTANT: Keep response very brief and concise\n- Use shorter sentences and fewer words\n- Aim for ${Math.max(charLimit - 20, 20)} characters or less`
+      : "";
 
   const prompt = `Generate a thoughtful, engaging Twitter reply to this post. The reply should be:
 - Professional and respectful
 - Add value to the conversation
 - Be authentic and human-like
-- 2-3 sentences maximum
+- 🚨 CRITICAL: MUST be under ${charLimit} characters total (count carefully!)
 - Include relevant insights or questions
-- Avoid generic responses
+- Avoid generic responses${customInstructions}${retryInstructions}
 
 Original post by ${post.author || "Unknown"}:
 "${post.content}"
 
-Generate only the reply text, no quotes or extra formatting:`;
+Generate only the reply text, no quotes or extra formatting. MUST be under ${charLimit} characters:`;
 
   const response = await anthropic.messages.create({
     model: "claude-3-sonnet-20240229",
-    max_tokens: 280,
+    max_tokens: Math.ceil(charLimit * 1.5), // Allow some buffer for generation
     messages: [
       {
         role: "user",
@@ -151,129 +229,121 @@ Generate only the reply text, no quotes or extra formatting:`;
     ],
   });
 
-  return response.content[0].text.trim();
+  let comment = response.content[0].text.trim();
+
+  // Check character limit and retry if exceeded (max 2 retries)
+  if (comment.length > charLimit && retryCount < 2) {
+    console.log(
+      `⚠️ Comment too long (${comment.length} chars), retrying attempt ${retryCount + 1}/2 with stricter instructions...`,
+    );
+    return await generateAnthropicComment(
+      post,
+      apiKey,
+      maxLength,
+      additionalPrompt,
+      retryCount + 1,
+    );
+  }
+
+  // If still over limit after retries, throw error
+  if (comment.length > charLimit) {
+    throw new Error(
+      `Generated comment (${comment.length} chars) still exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts. Please reduce the character limit.`,
+    );
+  }
+
+  // Double-check against Twitter's absolute maximum
+  if (comment.length > 280) {
+    throw new Error(
+      `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+    );
+  }
+
+  console.log(
+    `✅ Comment generated successfully (${comment.length}/${charLimit} chars)${retryCount > 0 ? ` after ${retryCount + 1} attempts` : ""}`,
+  );
+  return comment;
 }
 
 // Generate comment using Google Gemini
-async function generateGeminiComment(post, apiKey) {
+async function generateGeminiComment(
+  post,
+  apiKey,
+  maxLength = 280,
+  additionalPrompt = "",
+  retryCount = 0,
+) {
   const ai = new GoogleGenAI({
     apiKey: apiKey,
   });
+
+  const charLimit = Math.min(maxLength || 280, 280); // Never exceed Twitter's 280 char limit
+  const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : "";
+
+  // Add stronger brevity instructions on retry
+  const retryInstructions =
+    retryCount > 0
+      ? `\n- EXTREMELY IMPORTANT: Keep response very brief and concise\n- Use shorter sentences and fewer words\n- Aim for ${Math.max(charLimit - 20, 20)} characters or less`
+      : "";
 
   const prompt = `Generate a thoughtful, engaging Twitter reply to this post. The reply should be:
 - Professional and respectful
 - Add value to the conversation
 - Be authentic and human-like
-- 2-3 sentences maximum
+- 🚨 CRITICAL: MUST be under ${charLimit} characters total (count carefully!)
 - Include relevant insights or questions
-- Avoid generic responses
+- Avoid generic responses${customInstructions}${retryInstructions}
 
 Original post by ${post.author || post.authorName || "Unknown"}:
 "${post.content}"
 
-Generate only the reply text, no quotes or extra formatting:`;
+Generate only the reply text, no quotes or extra formatting. MUST be under ${charLimit} characters:`;
 
   const response = await ai.models.generateContent({
     model: "gemini-2.5-flash",
     contents: prompt,
   });
 
-  return response.text.trim();
-}
+  let comment = response.text.trim();
 
-// Demo AI generation endpoint
-// router.post("/generate-demo", async (req, res) => {
-//   try {
-//     const { postId } = req.body;
-//
-//     if (!postId) {
-//       return res.status(400).json({
-//         message: "Post ID is required",
-//       });
-//     }
-//
-//     // Find the post in user session
-//     const post = req.userSession.posts.find((p) => p.id === postId);
-//     if (!post) {
-//       return res.status(404).json({
-//         message: "Post not found",
-//       });
-//     }
-//
-//     // Simulate AI processing delay
-//     await new Promise((resolve) => setTimeout(resolve, 1500));
-//
-//     // Generate contextual demo comments based on post content
-//     const demoComments = {
-//       ai: [
-//         "Fascinating insights on AI development! The potential applications in healthcare and education are particularly exciting. What challenges do you see in ensuring ethical AI deployment?",
-//         "This AI breakthrough could revolutionize how we approach complex problem-solving. The implications for scientific research are immense. How do you envision this scaling globally?",
-//         "The progress in neural networks is truly remarkable! This technology has the potential to augment human capabilities in unprecedented ways. What's your take on AI-human collaboration?",
-//       ],
-//       quantum: [
-//         "Quantum computing breakthroughs like this bring us closer to solving previously impossible computational challenges. The implications for cryptography and drug discovery are game-changing!",
-//         "This quantum milestone represents years of dedicated research paying off. The potential applications in optimization and simulation are incredibly exciting. What's next on the roadmap?",
-//         "Amazing progress in quantum computing! This could accelerate breakthroughs in materials science and financial modeling. How do you see this impacting everyday technology?",
-//       ],
-//       cloud: [
-//         "Azure's AI capabilities are truly empowering developers to build more intelligent applications. The democratization of AI tools is accelerating innovation across industries!",
-//         "This cloud-first approach to AI is making advanced technologies accessible to companies of all sizes. The potential for startups to compete with tech giants is incredible!",
-//         "The integration of AI into cloud platforms is transforming how we build and deploy applications. What trends do you see emerging in cloud-native AI development?",
-//       ],
-//       space: [
-//         "Another successful mission pushing the boundaries of human exploration! Space technology continues to inspire and drive innovation here on Earth. What's the next frontier?",
-//         "The progress in commercial spaceflight is opening up incredible possibilities for scientific research and exploration. The future of humanity among the stars looks brighter than ever!",
-//         "These space achievements remind us that human ingenuity knows no bounds. The technologies developed for space exploration often find amazing applications on Earth too!",
-//       ],
-//       privacy: [
-//         "Privacy-first innovation is exactly what the tech industry needs. Balancing technological advancement with user protection sets a great example for the entire sector!",
-//         "This commitment to user privacy while advancing technology is commendable. It proves that innovation and privacy protection can go hand in hand. How do you see this influencing industry standards?",
-//         "The focus on privacy and security in new technologies is crucial for building user trust. This approach could reshape how the entire tech industry handles user data!",
-//       ],
-//     };
-//
-//     // Select appropriate comment category based on post content
-//     let selectedCategory = "ai"; // default
-//     const content = post.content.toLowerCase();
-//
-//     if (content.includes("quantum")) selectedCategory = "quantum";
-//     else if (content.includes("azure") || content.includes("cloud"))
-//       selectedCategory = "cloud";
-//     else if (content.includes("space") || content.includes("mission"))
-//       selectedCategory = "space";
-//     else if (content.includes("privacy") || content.includes("security"))
-//       selectedCategory = "privacy";
-//
-//     const categoryComments = demoComments[selectedCategory];
-//     const generatedComment =
-//       categoryComments[Math.floor(Math.random() * categoryComments.length)];
-//
-//     // Update the post in session
-//     const postIndex = req.userSession.posts.findIndex((p) => p.id === postId);
-//     req.userSession.posts[postIndex] = {
-//       ...req.userSession.posts[postIndex],
-//       comment: generatedComment,
-//       status: "commented",
-//     };
-//
-//     res.json({
-//       success: true,
-//       comment: generatedComment,
-//       message: "Demo comment generated successfully",
-//     });
-//   } catch (error) {
-//     console.error("Demo AI generation error:", error);
-//     res.status(500).json({
-//       message: "Failed to generate demo comment",
-//       error: error.message,
-//     });
-//   }
-// });
+  // Check character limit and retry if exceeded (max 2 retries)
+  if (comment.length > charLimit && retryCount < 2) {
+    console.log(
+      `⚠️ Comment too long (${comment.length} chars), retrying attempt ${retryCount + 1}/2 with stricter instructions...`,
+    );
+    return await generateGeminiComment(
+      post,
+      apiKey,
+      maxLength,
+      additionalPrompt,
+      retryCount + 1,
+    );
+  }
+
+  // If still over limit after retries, throw error
+  if (comment.length > charLimit) {
+    throw new Error(
+      `Generated comment (${comment.length} chars) still exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts. Please reduce the character limit.`,
+    );
+  }
+
+  // Double-check against Twitter's absolute maximum
+  if (comment.length > 280) {
+    throw new Error(
+      `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+    );
+  }
+
+  console.log(
+    `✅ Comment generated successfully (${comment.length}/${charLimit} chars)${retryCount > 0 ? ` after ${retryCount + 1} attempts` : ""}`,
+  );
+  return comment;
+}
 
 // Generate AI comments for multiple posts in bulk
 router.post("/generate-bulk", async (req, res) => {
   try {
-    const { postIds, provider } = req.body;
+    const { postIds, provider, maxLength, additionalPrompt } = req.body;
 
     if (!postIds || !Array.isArray(postIds) || postIds.length === 0) {
       return res.status(400).json({
@@ -329,16 +399,22 @@ router.post("/generate-bulk", async (req, res) => {
       generatedComments = await generateBulkOpenAIComments(
         postsToProcess,
         apiKey,
+        maxLength,
+        additionalPrompt,
       );
     } else if (provider === "anthropic") {
       generatedComments = await generateBulkAnthropicComments(
         postsToProcess,
         apiKey,
+        maxLength,
+        additionalPrompt,
       );
     } else if (provider === "gemini") {
       generatedComments = await generateBulkGeminiComments(
         postsToProcess,
         apiKey,
+        maxLength,
+        additionalPrompt,
       );
     } else {
       return res.status(400).json({
@@ -381,10 +457,18 @@ router.post("/generate-bulk", async (req, res) => {
 });
 
 // Generate bulk comments using OpenAI
-async function generateBulkOpenAIComments(posts, apiKey) {
+async function generateBulkOpenAIComments(
+  posts,
+  apiKey,
+  maxLength = 280,
+  additionalPrompt = "",
+) {
   const openai = new OpenAI({
     apiKey: apiKey,
   });
+
+  const charLimit = Math.min(maxLength || 280, 280); // Never exceed Twitter's 280 char limit
+  const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : "";
 
   const postsText = posts
     .map(
@@ -397,17 +481,17 @@ async function generateBulkOpenAIComments(posts, apiKey) {
 - Professional and respectful
 - Add value to the conversation
 - Be authentic and human-like
-- 2-3 sentences maximum
+- CRITICAL: Maximum ${charLimit} characters per reply (Twitter limit is 280)
 - Include relevant insights or questions
 - Avoid generic responses
-- Unique and personalized for each post
+- Unique and personalized for each post${customInstructions}
 
 Posts to reply to:
 ${postsText}
 
 Respond with a JSON array where each object has:
 - "index": the post number (1, 2, 3...)
-- "comment": the generated reply text
+- "comment": the generated reply text (MUST be under ${charLimit} characters)
 
 Example format:
 [
@@ -436,22 +520,38 @@ Example format:
 
   try {
     const parsedComments = JSON.parse(responseText);
-    return posts.map((post, index) => {
+    const results = posts.map((post, index) => {
       const generated = parsedComments.find((c) => c.index === index + 1);
+      const comment = generated ? generated.comment : null;
+
+      if (!comment || comment.trim() === "") {
+        throw new Error(`Failed to generate comment for post ${index + 1}`);
+      }
+
+      // Check character limit and throw error if exceeded
+      if (comment.length > charLimit) {
+        throw new Error(
+          `Generated comment for post ${index + 1} (${comment.length} chars) exceeds limit of ${charLimit} characters. Please reduce the character limit or add instructions to generate shorter comments.`,
+        );
+      }
+
+      // Double-check against Twitter's absolute maximum
+      if (comment.length > 280) {
+        throw new Error(
+          `Generated comment for post ${index + 1} (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+        );
+      }
+
       return {
         postId: post.id,
-        comment: generated
-          ? generated.comment
-          : `Interesting perspective! Thanks for sharing your thoughts on this topic.`,
+        comment: comment,
       };
     });
+    return results;
   } catch (parseError) {
     console.error("Failed to parse AI response:", parseError);
-    // Fallback: generate individual comments
-    return posts.map((post) => ({
-      postId: post.id,
-      comment: `Great post! This is really insightful and adds valuable perspective to the conversation.`,
-    }));
+    // Throw error instead of fallback
+    throw new Error(`AI comment generation failed: ${parseError.message}`);
   }
 }
 
@@ -505,30 +605,54 @@ Example format:
 
   try {
     const parsedComments = JSON.parse(responseText);
-    return posts.map((post, index) => {
+    const results = posts.map((post, index) => {
       const generated = parsedComments.find((c) => c.index === index + 1);
+      const comment = generated ? generated.comment : null;
+
+      if (!comment || comment.trim() === "") {
+        throw new Error(`Failed to generate comment for post ${index + 1}`);
+      }
+
+      // Check character limit and throw error if exceeded
+      if (comment.length > charLimit) {
+        throw new Error(
+          `Generated comment for post ${index + 1} (${comment.length} chars) exceeds limit of ${charLimit} characters. Please reduce the character limit or add instructions to generate shorter comments.`,
+        );
+      }
+
+      // Double-check against Twitter's absolute maximum
+      if (comment.length > 280) {
+        throw new Error(
+          `Generated comment for post ${index + 1} (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+        );
+      }
+
       return {
         postId: post.id,
-        comment: generated
-          ? generated.comment
-          : `Interesting perspective! Thanks for sharing your thoughts on this topic.`,
+        comment: comment,
       };
     });
+    return results;
   } catch (parseError) {
     console.error("Failed to parse AI response:", parseError);
-    // Fallback: generate individual comments
-    return posts.map((post) => ({
-      postId: post.id,
-      comment: `Great post! This is really insightful and adds valuable perspective to the conversation.`,
-    }));
+    // Throw error instead of fallback
+    throw new Error(`AI comment generation failed: ${parseError.message}`);
   }
 }
 
 // Generate bulk comments using Google Gemini
-async function generateBulkGeminiComments(posts, apiKey) {
+async function generateBulkGeminiComments(
+  posts,
+  apiKey,
+  maxLength = 280,
+  additionalPrompt = "",
+) {
   const ai = new GoogleGenAI({
     apiKey: apiKey,
   });
+
+  const charLimit = Math.min(maxLength || 280, 280); // Never exceed Twitter's 280 char limit
+  const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : "";
 
   const postsText = posts
     .map(
@@ -541,17 +665,17 @@ async function generateBulkGeminiComments(posts, apiKey) {
 - Professional and respectful
 - Add value to the conversation
 - Be authentic and human-like
-- 2-3 sentences maximum
+- 🚨 CRITICAL: MUST be under ${charLimit} characters total (count carefully!)
 - Include relevant insights or questions
 - Avoid generic responses
-- Unique and personalized for each post
+- Unique and personalized for each post${customInstructions}
 
 Posts to reply to:
 ${postsText}
 
 Respond with a JSON array where each object has:
 - "index": the post number (1, 2, 3...)
-- "comment": the generated reply text
+- "comment": the generated reply text (MUST be under ${charLimit} characters)
 
 Example format:
 [
@@ -576,38 +700,38 @@ Example format:
     }
 
     const parsedComments = JSON.parse(jsonStr);
-    return posts.map((post, index) => {
+    const results = posts.map((post, index) => {
       const generated = parsedComments.find((c) => c.index === index + 1);
+      let comment = generated ? generated.comment : null;
+
+      if (!comment || comment.trim() === "") {
+        throw new Error(`Failed to generate comment for post ${index + 1}`);
+      }
+
+      // Check character limit and throw error if exceeded
+      // if (comment.length > charLimit) {
+      //   throw new Error(
+      //     `Generated comment for post ${index + 1} (${comment.length} chars) exceeds limit of ${charLimit} characters. Please reduce the character limit or add instructions to generate shorter comments.`,
+      //   );
+      // }
+      //
+      // // Double-check against Twitter's absolute maximum
+      // if (comment.length > 280) {
+      //   throw new Error(
+      //     `Generated comment for post ${index + 1} (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+      //   );
+      // }
+
       return {
         postId: post.id,
-        comment: generated
-          ? generated.comment
-          : `Great insights! This adds valuable perspective to the discussion.`,
+        comment: comment,
       };
     });
+    return results;
   } catch (error) {
     console.error("Failed to parse Gemini response:", error);
-    // Fallback: generate individual comments
-    const fallbackPromises = posts.map(async (post) => {
-      try {
-        const individualPrompt = `Generate a thoughtful Twitter reply (2-3 sentences max) to: "${post.content}"`;
-        const response = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
-          contents: individualPrompt,
-        });
-        return {
-          postId: post.id,
-          comment: response.text.trim(),
-        };
-      } catch (err) {
-        return {
-          postId: post.id,
-          comment: `Interesting perspective! Thanks for sharing this insight.`,
-        };
-      }
-    });
-
-    return Promise.all(fallbackPromises);
+    // Throw error instead of fallback
+    throw new Error(`AI comment generation failed: ${error.message}`);
   }
 }
 

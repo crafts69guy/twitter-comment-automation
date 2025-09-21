@@ -23,7 +23,7 @@ import {
   AlertIcon,
   AlertDescription,
 } from "@chakra-ui/react";
-import { ExternalLinkIcon, ChatIcon, CheckIcon } from "@chakra-ui/icons";
+import { ExternalLinkIcon, ChatIcon, CheckIcon, RepeatIcon } from "@chakra-ui/icons";
 
 function PostsTable({
   posts,
