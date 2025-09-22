@@ -45,7 +45,7 @@ class PuppeteerService {
       }
 
       this.browser = await puppeteer.launch({
-        headless: false, // Open visible browser window
+        headless: true, // Open visible browser window
         channel: chromePath ? undefined : "chrome", // Try to find Chrome automatically if path not found
         executablePath: chromePath, // Use real Chrome if found
         args: [
@@ -107,7 +107,7 @@ class PuppeteerService {
 
     // Set user agent to avoid detection
     await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
     );
 
     // Set viewport to desktop size
@@ -280,7 +280,7 @@ class PuppeteerService {
       }, selectors);
 
       console.log(
-        `Scraped ${url}: Found text: ${tweetData.debug.foundTweetText}, Length: ${tweetData.debug.textLength}`
+        `Scraped ${url}: Found text: ${tweetData.debug.foundTweetText}, Length: ${tweetData.debug.textLength}`,
       );
 
       return tweetData;
@@ -317,7 +317,7 @@ class PuppeteerService {
 
           // Set user agent to avoid detection
           await page.setUserAgent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
           );
 
           // Only block heavy resources, keep CSS for proper rendering
@@ -447,13 +447,13 @@ class PuppeteerService {
               buttonSelector,
               (el) =>
                 el.hasAttribute("disabled") ||
-                el.getAttribute("aria-disabled") === "true"
+                el.getAttribute("aria-disabled") === "true",
             );
 
             if (!isDisabled) {
               buttonEnabled = true;
               console.log(
-                `Reply button is now enabled using selector: ${buttonSelector}`
+                `Reply button is now enabled using selector: ${buttonSelector}`,
               );
               break;
             } else {
@@ -479,7 +479,7 @@ class PuppeteerService {
                   selector,
                   (el) =>
                     el.hasAttribute("disabled") ||
-                    el.getAttribute("aria-disabled") === "true"
+                    el.getAttribute("aria-disabled") === "true",
                 )
                 .catch(() => true); // If eval fails, assume disabled
 
@@ -487,7 +487,7 @@ class PuppeteerService {
                 await button.click();
                 submitClicked = true;
                 console.log(
-                  `Submit button clicked using selector: ${selector}`
+                  `Submit button clicked using selector: ${selector}`,
                 );
                 break;
               } else {
@@ -496,7 +496,7 @@ class PuppeteerService {
             }
           } catch (error) {
             console.log(
-              `Failed to click submit with selector ${selector}: ${error.message}`
+              `Failed to click submit with selector ${selector}: ${error.message}`,
             );
             continue;
           }
@@ -505,7 +505,7 @@ class PuppeteerService {
 
       if (!submitClicked) {
         console.log(
-          "Submit button not found or disabled, reply may still be successful"
+          "Submit button not found or disabled, reply may still be successful",
         );
       }
 
