@@ -23,7 +23,12 @@ import {
   AlertIcon,
   AlertDescription,
 } from "@chakra-ui/react";
-import { ExternalLinkIcon, ChatIcon, CheckIcon, RepeatIcon } from "@chakra-ui/icons";
+import {
+  ExternalLinkIcon,
+  ChatIcon,
+  CheckIcon,
+  RepeatIcon,
+} from "@chakra-ui/icons";
 
 function PostsTable({
   posts,
@@ -32,7 +37,7 @@ function PostsTable({
   onGenerateComment,
   onGenerateAllComments,
   onReply,
-  onReplyAll,
+  // onReplyAll,
   onAutoReply,
   onAutoReplyAll,
   loading,
@@ -138,20 +143,22 @@ function PostsTable({
                     >
                       Generate All Comments
                     </Button>
-                    <Button
-                      colorScheme="orange"
-                      onClick={onReplyAll}
-                      isLoading={loading}
-                      loadingText="Replying..."
-                      size="lg"
-                      rounded="xl"
-                      shadow="md"
-                      _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                      leftIcon={<Box as="span">📤</Box>}
-                      px={8}
-                    >
-                      Reply All
-                    </Button>
+
+                    {/* <Button */}
+                    {/*   colorScheme="orange" */}
+                    {/*   onClick={onReplyAll} */}
+                    {/*   isLoading={loading} */}
+                    {/*   loadingText="Replying..." */}
+                    {/*   size="lg" */}
+                    {/*   rounded="xl" */}
+                    {/*   shadow="md" */}
+                    {/*   _hover={{ transform: "translateY(-1px)", shadow: "lg" }} */}
+                    {/*   leftIcon={<Box as="span">📤</Box>} */}
+                    {/*   px={8} */}
+                    {/* > */}
+                    {/*   Reply All */}
+                    {/* </Button> */}
+
                     <Button
                       colorScheme="red"
                       onClick={onAutoReplyAll}
@@ -404,7 +411,10 @@ function PostsTable({
                                 {post?.comment &&
                                   post?.status !== "replied" && (
                                     <>
-                                      <Tooltip label="Manual reply (copy to clipboard)" hasArrow>
+                                      <Tooltip
+                                        label="Manual reply (copy to clipboard)"
+                                        hasArrow
+                                      >
                                         <IconButton
                                           aria-label="Reply to post"
                                           icon={<CheckIcon />}
@@ -416,7 +426,10 @@ function PostsTable({
                                           _hover={{ transform: "scale(1.05)" }}
                                         />
                                       </Tooltip>
-                                      <Tooltip label="Auto-reply (automated posting)" hasArrow>
+                                      <Tooltip
+                                        label="Auto-reply (automated posting)"
+                                        hasArrow
+                                      >
                                         <IconButton
                                           aria-label="Auto-reply to post"
                                           icon={<Box as="span">🤖</Box>}

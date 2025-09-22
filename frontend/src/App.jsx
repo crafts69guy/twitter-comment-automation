@@ -452,50 +452,50 @@ function App() {
     }
   };
 
-  const replyToAllPosts = async () => {
-    const postsWithComments = posts.filter(
-      (post) =>
-        post.comment && post.comment.trim() !== "" && post.status !== "replied",
-    );
-
-    if (postsWithComments.length === 0) {
-      toast({
-        title: "No Posts to Reply",
-        description: "All posts with comments have already been replied to.",
-        status: "info",
-        duration: 3000,
-      });
-      return;
-    }
-
-    setLoading(true);
-
-    try {
-      // Process each post
-      for (const post of postsWithComments) {
-        await replyToPost(post.id);
-        // Add delay between replies to avoid overwhelming
-        await new Promise((resolve) => setTimeout(resolve, 1000));
-      }
-
-      toast({
-        title: "Bulk Reply Complete",
-        description: `Opened ${postsWithComments.length} posts for replying!`,
-        status: "success",
-        duration: 4000,
-      });
-    } catch (error) {
-      toast({
-        title: "Bulk Reply Error",
-        description:
-          "Some posts may not have been processed. Please try individual replies.",
-        status: "error",
-        duration: 5000,
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
+  // const replyToAllPosts = async () => {
+  //   const postsWithComments = posts.filter(
+  //     (post) =>
+  //       post.comment && post.comment.trim() !== "" && post.status !== "replied",
+  //   );
+  //
+  //   if (postsWithComments.length === 0) {
+  //     toast({
+  //       title: "No Posts to Reply",
+  //       description: "All posts with comments have already been replied to.",
+  //       status: "info",
+  //       duration: 3000,
+  //     });
+  //     return;
+  //   }
+  //
+  //   setLoading(true);
+  //
+  //   try {
+  //     // Process each post
+  //     for (const post of postsWithComments) {
+  //       await replyToPost(post.id);
+  //       // Add delay between replies to avoid overwhelming
+  //       await new Promise((resolve) => setTimeout(resolve, 1000));
+  //     }
+  //
+  //     toast({
+  //       title: "Bulk Reply Complete",
+  //       description: `Opened ${postsWithComments.length} posts for replying!`,
+  //       status: "success",
+  //       duration: 4000,
+  //     });
+  //   } catch (error) {
+  //     toast({
+  //       title: "Bulk Reply Error",
+  //       description:
+  //         "Some posts may not have been processed. Please try individual replies.",
+  //       status: "error",
+  //       duration: 5000,
+  //     });
+  //   } finally {
+  //     setLoading(false);
+  //   }
+  // };
 
   return (
     <Box bg="gray.50" minH="100vh" minW="100vw">
@@ -560,7 +560,7 @@ function App() {
                   onGenerateComment={generateComment}
                   onGenerateAllComments={generateAllComments}
                   onReply={replyToPost}
-                  onReplyAll={replyToAllPosts}
+                  // onReplyAll={replyToAllPosts}
                   onAutoReply={autoReplyToPost}
                   onAutoReplyAll={autoReplyToAllPosts}
                   loading={loading}
