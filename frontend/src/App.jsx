@@ -17,7 +17,11 @@ import Settings from "./components/Settings";
 import PostsTable from "./components/PostsTable";
 import axios from "axios";
 
-const API_URL = "http://localhost:3001/api";
+// When running with Docker, use relative path for API calls (nginx will proxy to backend)
+// When running locally without Docker, use localhost:3001
+const API_URL = window.location.hostname === 'localhost' && window.location.port !== '80' && window.location.port !== ''
+  ? "http://localhost:3001/api"  // Development mode (npm run dev)
+  : "/api";  // Production/Docker mode (nginx proxy)
 
 axios.defaults.withCredentials = true;
 

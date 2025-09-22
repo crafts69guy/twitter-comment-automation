@@ -10,74 +10,86 @@ class PuppeteerService {
 
   async initialize() {
     if (!this.browser) {
-      // Path to real Google Chrome on different platforms
-      let chromePath;
-
-      if (process.platform === "darwin") {
-        // macOS
-        chromePath =
-          "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
-      } else if (process.platform === "win32") {
-        // Windows
-        chromePath =
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe";
-        // Alternative Windows path
-        if (!fs.existsSync(chromePath)) {
-          chromePath =
-            "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe";
-        }
-      } else {
-        // Linux
-        chromePath = "/usr/bin/google-chrome";
-        // Alternative Linux paths
-        if (!fs.existsSync(chromePath)) {
-          chromePath = "/usr/bin/google-chrome-stable";
-        }
-      }
-
-      // Check if Chrome exists
-      if (!fs.existsSync(chromePath)) {
-        console.log("Google Chrome not found at:", chromePath);
-        console.log("Using Puppeteer's bundled Chromium instead");
-        chromePath = undefined; // Will use bundled Chromium
-      } else {
-        console.log("Using real Google Chrome from:", chromePath);
-      }
-
-      this.browser = await puppeteer.launch({
-        headless: true, // Open visible browser window
-        channel: chromePath ? undefined : "chrome", // Try to find Chrome automatically if path not found
-        executablePath: chromePath, // Use real Chrome if found
+      // Configuration for browser launch
+      let launchOptions = {
+        headless: true,
         args: [
           "--no-sandbox",
           "--disable-setuid-sandbox",
           "--disable-dev-shm-usage",
-          "--disable-blink-features=AutomationControlled", // Hide automation
-          "--window-size=1920,1080", // Set initial window size
-          "--start-maximized", // Start maximized
+          "--disable-accelerated-2d-canvas",
+          "--no-first-run",
+          "--no-zygote",
+          "--disable-gpu",
+          "--disable-blink-features=AutomationControlled",
+          "--window-size=1920,1080",
           "--disable-web-security",
           "--disable-features=IsolateOrigins,site-per-process",
           "--allow-running-insecure-content",
-          "--no-first-run",
           "--no-default-browser-check",
-          "--disable-infobars", // Remove "controlled by automated test" bar
+          "--disable-infobars",
           "--exclude-switches=enable-automation",
           "--enable-features=NetworkService,NetworkServiceInProcess",
           "--disable-background-timer-throttling",
           "--disable-backgrounding-occluded-windows",
           "--disable-renderer-backgrounding",
-          "--disable-features=TranslateUI",
-          "--disable-ipc-flooding-protection",
-          "--user-data-dir=/tmp/chrome-testing", // Use a custom profile directory
-        ],
-        defaultViewport: null, // Use full browser window
-        ignoreDefaultArgs: [
-          "--enable-automation",
-          "--enable-blink-features=AutomationControlled",
-        ], // Remove automation flags
-        ignoreHTTPSErrors: true,
-      });
+          "--disable-features=TranslateUI"
+        ]
+      };
 
+      // Check if running in Docker (Alpine Linux with Chromium)
+      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+        console.log("Using Docker Chromium from env:", process.env.PUPPETEER_EXECUTABLE_PATH);
+        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+      } else if (fs.existsSync('/usr/bin/chromium-browser')) {
+        // Alpine Linux Chromium
+        console.log("Using Alpine Chromium: /usr/bin/chromium-browser");
+        launchOptions.executablePath = '/usr/bin/chromium-browser';
+      } else if (process.platform === "darwin") {
+        // macOS
+        const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        if (fs.existsSync(chromePath)) {
+          console.log("Using macOS Chrome:", chromePath);
+          launchOptions.executablePath = chromePath;
+        }
+      } else if (process.platform === "win32") {
+        // Windows
+        const windowsPaths = [
+          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+        ];
+
+        for (const path of windowsPaths) {
+          if (fs.existsSync(path)) {
+            console.log("Using Windows Chrome:", path);
+            launchOptions.executablePath = path;
+            break;
+          }
+        }
+      } else {
+        // Linux
+        const linuxPaths = [
+          "/usr/bin/google-chrome",
+          "/usr/bin/google-chrome-stable",
+          "/usr/bin/chromium-browser",
+          "/usr/bin/chromium"
+        ];
+
+        for (const path of linuxPaths) {
+          if (fs.existsSync(path)) {
+            console.log("Using Linux Chrome/Chromium:", path);
+            launchOptions.executablePath = path;
+            break;
+          }
+        }
+      }
+
+      // If no executable found, use Puppeteer's bundled Chromium
+      if (!launchOptions.executablePath) {
+        console.log("No Chrome/Chromium found, using Puppeteer's bundled Chromium");
+      }
+
+      this.browser = await puppeteer.launch(launchOptions);
       console.log("Browser opened successfully");
     }
     return this.browser;
