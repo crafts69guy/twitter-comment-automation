@@ -75,7 +75,7 @@ function App() {
       "https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing",
     aiProvider: "gemini",
     maxTabs: 5,
-    commentMaxLength: 280,
+    commentMaxLength: 50,
     additionalPrompt: "",
   });
   const [loading, setLoading] = useState(false);
@@ -192,7 +192,7 @@ function App() {
       const response = await axios.post(`${API_URL}/ai/generate`, {
         postId,
         provider: settings.aiProvider,
-        maxLength: settings.commentMaxLength || 280,
+        maxLength: settings.commentMaxLength || 50,
         additionalPrompt: settings.additionalPrompt || "",
       });
 
@@ -248,7 +248,7 @@ function App() {
       const response = await axios.post(`${API_URL}/ai/generate-bulk`, {
         postIds,
         provider: settings.aiProvider,
-        maxLength: settings.commentMaxLength || 280,
+        maxLength: settings.commentMaxLength || 50,
         additionalPrompt: settings.additionalPrompt || "",
       });
 
@@ -452,6 +452,109 @@ function App() {
     }
   };
 
+  const enjoyAutomationAll = async () => {
+    setLoading(true);
+
+    try {
+      // Step 1: Fetch posts from Google Sheets
+      toast({
+        title: "Step 1/4: Fetching Posts",
+        description: "Loading posts from Google Sheets...",
+        status: "info",
+        duration: 3000,
+      });
+
+      const fetchResponse = await axios.post(`${API_URL}/google-sheets/fetch`, {
+        sheetUrl: settings.googleSheetUrl,
+      });
+      setPosts(fetchResponse.data.posts);
+
+      if (fetchResponse.data.posts.length === 0) {
+        toast({
+          title: "No Posts Found",
+          description: "No posts were found in the Google Sheet.",
+          status: "warning",
+          duration: 3000,
+        });
+        return;
+      }
+
+      // Step 2: Scrape content from Twitter
+      toast({
+        title: "Step 2/4: Scraping Content",
+        description: "Extracting content from Twitter posts...",
+        status: "info",
+        duration: 3000,
+      });
+
+      const postIds = fetchResponse.data.posts.map((post) => post.id);
+      await axios.post(`${API_URL}/scraper/scrape-posts`, {
+        postIds,
+        maxTabs: settings.maxTabs || 5,
+      });
+
+      // Step 3: Generate comments for all posts
+      toast({
+        title: "Step 3/4: Generating Comments",
+        description: "Creating AI-powered comments for all posts...",
+        status: "info",
+        duration: 3000,
+      });
+
+      const bulkResponse = await axios.post(`${API_URL}/ai/generate-bulk`, {
+        postIds,
+        provider: settings.aiProvider,
+        maxLength: settings.commentMaxLength || 50,
+        additionalPrompt: settings.additionalPrompt || "",
+      });
+
+      // Step 4: Auto-reply to all posts
+      toast({
+        title: "Step 4/4: Auto-Replying",
+        description: "Posting comments to Twitter...",
+        status: "info",
+        duration: 3000,
+      });
+
+      const replyResponse = await axios.post(`${API_URL}/auto-reply/batch`, {
+        postIds,
+      });
+
+      // Refresh posts from session to get final status
+      const postsResponse = await axios.get(`${API_URL}/posts/current`);
+      setPosts(postsResponse.data.posts);
+
+      // Show final success message
+      toast({
+        title: "🎉 Full Automation Complete!",
+        description: `Successfully processed ${replyResponse.data.stats.successful} posts from fetching to auto-replying!`,
+        status: "success",
+        duration: 8000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: "Automation Failed",
+        description:
+          error.response?.data?.message ||
+          "An error occurred during the automation process",
+        status: "error",
+        duration: 5000,
+        isClosable: true,
+      });
+
+      // Try to refresh posts to show current status
+      try {
+        const postsResponse = await axios.get(`${API_URL}/posts/current`);
+        setPosts(postsResponse.data.posts);
+      } catch (refreshError) {
+        console.error("Failed to refresh posts:", refreshError);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // const replyToAllPosts = async () => {
   //   const postsWithComments = posts.filter(
   //     (post) =>
@@ -563,6 +666,7 @@ function App() {
                   // onReplyAll={replyToAllPosts}
                   onAutoReply={autoReplyToPost}
                   onAutoReplyAll={autoReplyToAllPosts}
+                  onEnjoyAutomationAll={enjoyAutomationAll}
                   loading={loading}
                   hasSettings={!!settings.googleSheetUrl}
                 />

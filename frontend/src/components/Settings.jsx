@@ -201,7 +201,7 @@ function Settings({ settings, onUpdate }) {
                       ✏️ Comment Character Limit
                     </FormLabel>
                     <NumberInput
-                      value={localSettings.commentMaxLength || 280}
+                      value={localSettings.commentMaxLength || 50}
                       onChange={(_valueString, valueNumber) =>
                         handleInputChange("commentMaxLength", valueNumber)
                       }

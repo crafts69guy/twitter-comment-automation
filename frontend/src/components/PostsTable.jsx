@@ -40,6 +40,7 @@ function PostsTable({
   // onReplyAll,
   onAutoReply,
   onAutoReplyAll,
+  onEnjoyAutomationAll,
   loading,
   hasSettings,
 }) {
@@ -98,84 +99,111 @@ function PostsTable({
                   Fetch posts from Google Sheets and manage comment generation
                 </Text>
               </Box>
-              <HStack spacing={4} wrap="wrap">
+              <VStack spacing={8}>
                 <Button
-                  colorScheme="blue"
-                  onClick={onFetchPosts}
+                  colorScheme="purple"
+                  variant="solid"
+                  onClick={onEnjoyAutomationAll}
                   isLoading={loading}
-                  loadingText="Fetching..."
-                  size="lg"
+                  loadingText="Automating Everything..."
+                  size="xl"
                   rounded="xl"
-                  shadow="md"
-                  _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                  leftIcon={<Box as="span">🔄</Box>}
-                  px={8}
+                  shadow="lg"
+                  leftIcon={<Box as="span">🚀</Box>}
+                  px={12}
+                  py={6}
+                  fontSize="lg"
+                  fontWeight="bold"
+                  bgGradient="linear(to-r, purple.500, pink.500)"
+                  _hover={{
+                    bgGradient: "linear(to-r, purple.600, pink.600)",
+                    transform: "translateY(-2px)",
+                    shadow: "xl",
+                  }}
+                  color="white"
                 >
-                  Fetch Posts
+                  🎉 Enjoy Automation Everything
                 </Button>
-                {posts && posts.length > 0 && (
-                  <>
-                    <Button
-                      colorScheme="purple"
-                      onClick={onScrapeContent}
-                      isLoading={loading}
-                      loadingText="Scraping..."
-                      size="lg"
-                      rounded="xl"
-                      shadow="md"
-                      _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                      leftIcon={<Box as="span">🕷️</Box>}
-                      px={8}
-                    >
-                      Scrape Content
-                    </Button>
-                    <Button
-                      colorScheme="green"
-                      onClick={onGenerateAllComments}
-                      isLoading={loading}
-                      loadingText="Generating..."
-                      size="lg"
-                      rounded="xl"
-                      shadow="md"
-                      _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                      leftIcon={<Box as="span">🤖</Box>}
-                      px={8}
-                    >
-                      Generate All Comments
-                    </Button>
 
-                    {/* <Button */}
-                    {/*   colorScheme="orange" */}
-                    {/*   onClick={onReplyAll} */}
-                    {/*   isLoading={loading} */}
-                    {/*   loadingText="Replying..." */}
-                    {/*   size="lg" */}
-                    {/*   rounded="xl" */}
-                    {/*   shadow="md" */}
-                    {/*   _hover={{ transform: "translateY(-1px)", shadow: "lg" }} */}
-                    {/*   leftIcon={<Box as="span">📤</Box>} */}
-                    {/*   px={8} */}
-                    {/* > */}
-                    {/*   Reply All */}
-                    {/* </Button> */}
+                <HStack spacing={4} wrap="wrap">
+                  <Button
+                    colorScheme="blue"
+                    onClick={onFetchPosts}
+                    isLoading={loading}
+                    loadingText="Fetching..."
+                    size="lg"
+                    rounded="xl"
+                    shadow="md"
+                    _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                    leftIcon={<Box as="span">🔄</Box>}
+                    px={8}
+                  >
+                    Fetch Posts
+                  </Button>
+                  {posts && posts.length > 0 && (
+                    <>
+                      <Button
+                        colorScheme="purple"
+                        onClick={onScrapeContent}
+                        isLoading={loading}
+                        loadingText="Scraping..."
+                        size="lg"
+                        rounded="xl"
+                        shadow="md"
+                        _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                        leftIcon={<Box as="span">🕷️</Box>}
+                        px={8}
+                      >
+                        Scrape Content
+                      </Button>
+                      <Button
+                        colorScheme="green"
+                        onClick={onGenerateAllComments}
+                        isLoading={loading}
+                        loadingText="Generating..."
+                        size="lg"
+                        rounded="xl"
+                        shadow="md"
+                        _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                        leftIcon={<Box as="span">🤖</Box>}
+                        px={8}
+                      >
+                        Generate All Comments
+                      </Button>
 
-                    <Button
-                      colorScheme="red"
-                      onClick={onAutoReplyAll}
-                      isLoading={loading}
-                      loadingText="Auto-Replying..."
-                      size="lg"
-                      rounded="xl"
-                      shadow="md"
-                      _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                      leftIcon={<Box as="span">🤖</Box>}
-                      px={8}
-                    >
-                      Auto Reply All
-                    </Button>
-                  </>
-                )}
-              </HStack>
+                      {/* <Button */}
+                      {/*   colorScheme="orange" */}
+                      {/*   onClick={onReplyAll} */}
+                      {/*   isLoading={loading} */}
+                      {/*   loadingText="Replying..." */}
+                      {/*   size="lg" */}
+                      {/*   rounded="xl" */}
+                      {/*   shadow="md" */}
+                      {/*   _hover={{ transform: "translateY(-1px)", shadow: "lg" }} */}
+                      {/*   leftIcon={<Box as="span">📤</Box>} */}
+                      {/*   px={8} */}
+                      {/* > */}
+                      {/*   Reply All */}
+                      {/* </Button> */}
+
+                      <Button
+                        colorScheme="red"
+                        onClick={onAutoReplyAll}
+                        isLoading={loading}
+                        loadingText="Auto-Replying..."
+                        size="lg"
+                        rounded="xl"
+                        shadow="md"
+                        _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                        leftIcon={<Box as="span">🤖</Box>}
+                        px={8}
+                      >
+                        Auto Reply All
+                      </Button>
+                    </>
+                  )}
+                </HStack>
+              </VStack>
             </VStack>
           </CardHeader>
         </Card>
