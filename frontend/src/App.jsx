@@ -77,14 +77,71 @@ function App() {
     maxTabs: 5,
     commentMaxLength: 50,
     additionalPrompt: "",
+    scheduledAutomation: {
+      enabled: false,
+      intervalMinutes: 20,
+      batchSize: 10,
+      startImmediately: true,
+    },
   });
   const [loading, setLoading] = useState(false);
+  const [scheduledState, setScheduledState] = useState({
+    isActive: false,
+    nextRunTime: null,
+    timeRemaining: 0,
+    currentCycle: 0,
+    totalProcessed: 0,
+  });
   const toast = useToast();
 
   useEffect(() => {
     checkHealth();
     loadSavedSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Timer effect for scheduled automation
+  useEffect(() => {
+    let interval;
+
+    if (scheduledState.isActive && scheduledState.nextRunTime) {
+      interval = setInterval(() => {
+        const now = new Date().getTime();
+        const timeLeft = scheduledState.nextRunTime - now;
+
+        if (timeLeft <= 0) {
+          // Time to run automation
+          runScheduledAutomation();
+        } else {
+          // Update countdown
+          setScheduledState((prev) => ({
+            ...prev,
+            timeRemaining: timeLeft,
+          }));
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [scheduledState.isActive, scheduledState.nextRunTime]);
+
+  // Load scheduled automation state from localStorage
+  useEffect(() => {
+    const savedScheduledState = localStorage.getItem(
+      "scheduledAutomationState",
+    );
+    if (savedScheduledState) {
+      try {
+        const parsed = JSON.parse(savedScheduledState);
+        if (parsed.isActive && parsed.nextRunTime > new Date().getTime()) {
+          setScheduledState(parsed);
+        }
+      } catch (error) {
+        console.error("Error loading scheduled state:", error);
+      }
+    }
   }, []);
 
   const loadSavedSettings = () => {
@@ -555,6 +612,248 @@ function App() {
     }
   };
 
+  const runScheduledAutomation = async (isImmediateRun = false) => {
+    try {
+      const batchSize = settings.scheduledAutomation.batchSize || 10;
+
+      // Fetch current posts to work with
+      let currentPosts = posts;
+      if (currentPosts.length === 0) {
+        const fetchResponse = await axios.post(
+          `${API_URL}/google-sheets/fetch`,
+          {
+            sheetUrl: settings.googleSheetUrl,
+          },
+        );
+        currentPosts = fetchResponse.data.posts;
+        setPosts(currentPosts);
+      }
+
+      // Find posts that need processing (pending or have content but no comments)
+      const postsToProcess = currentPosts
+        .filter(
+          (post) =>
+            post.status === "pending" ||
+            (post.content && (!post.comment || post.comment.trim() === "")),
+        )
+        .slice(0, batchSize);
+
+      if (postsToProcess.length === 0) {
+        if (!isImmediateRun) {
+          toast({
+            title: "Scheduled Run Complete",
+            description: "No posts require processing at this time.",
+            status: "info",
+            duration: 3000,
+          });
+          scheduleNextRun();
+        }
+        return;
+      }
+
+      toast({
+        title: `🤖 Scheduled Automation Running`,
+        description: `Processing ${postsToProcess.length} posts...`,
+        status: "info",
+        duration: 3000,
+      });
+
+      const postIds = postsToProcess.map((post) => post.id);
+
+      // Step 1: Scrape content if needed
+      const postsNeedingScraping = postsToProcess.filter(
+        (post) => !post.content,
+      );
+      if (postsNeedingScraping.length > 0) {
+        await axios.post(`${API_URL}/scraper/scrape-posts`, {
+          postIds: postsNeedingScraping.map((p) => p.id),
+          maxTabs: settings.maxTabs || 5,
+        });
+      }
+
+      // Step 2: Generate comments
+      const postsNeedingComments = postsToProcess.filter(
+        (post) => !post.comment || post.comment.trim() === "",
+      );
+      if (postsNeedingComments.length > 0) {
+        await axios.post(`${API_URL}/ai/generate-bulk`, {
+          postIds: postsNeedingComments.map((p) => p.id),
+          provider: settings.aiProvider,
+          maxLength: settings.commentMaxLength || 50,
+          additionalPrompt: settings.additionalPrompt || "",
+        });
+      }
+
+      // Step 3: Auto-reply
+      await axios.post(`${API_URL}/auto-reply/batch`, {
+        postIds,
+      });
+
+      // Refresh posts
+      const postsResponse = await axios.get(`${API_URL}/posts/current`);
+      setPosts(postsResponse.data.posts);
+
+      // Update scheduled state
+      setScheduledState((prev) => ({
+        ...prev,
+        currentCycle: prev.currentCycle + 1,
+        totalProcessed: prev.totalProcessed + postsToProcess.length,
+      }));
+
+      if (!isImmediateRun) {
+        toast({
+          title: "✅ Scheduled Run Complete",
+          description: `Processed ${postsToProcess.length} posts successfully!`,
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+        });
+
+        scheduleNextRun();
+      }
+    } catch (error) {
+      if (!isImmediateRun) {
+        toast({
+          title: "Scheduled Automation Error",
+          description:
+            error.response?.data?.message || "Error during scheduled run",
+          status: "error",
+          duration: 5000,
+          isClosable: true,
+        });
+        scheduleNextRun();
+      } else {
+        // For immediate runs, just throw the error to be handled by the caller
+        throw error;
+      }
+    }
+  };
+
+  const scheduleNextRun = () => {
+    const intervalMs =
+      (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
+    const nextRunTime = new Date().getTime() + intervalMs;
+
+    const newState = {
+      ...scheduledState,
+      nextRunTime,
+      timeRemaining: intervalMs,
+    };
+
+    setScheduledState(newState);
+    localStorage.setItem("scheduledAutomationState", JSON.stringify(newState));
+  };
+
+  const startScheduledAutomation = async () => {
+    const shouldStartImmediately =
+      settings.scheduledAutomation.startImmediately;
+    const intervalMs =
+      (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
+
+    if (shouldStartImmediately) {
+      // Run automation immediately first
+      toast({
+        title: "🚀 Starting Immediate Run",
+        description:
+          "Running first automation cycle now, then scheduling future runs...",
+        status: "info",
+        duration: 3000,
+      });
+
+      try {
+        // Run the automation immediately
+        await runScheduledAutomation(true);
+
+        // After immediate run, set up the regular schedule
+        const newState = {
+          isActive: true,
+          nextRunTime: new Date().getTime() + intervalMs,
+          timeRemaining: intervalMs,
+          currentCycle: 1, // Already completed one cycle
+          totalProcessed: 0, // Will be updated by runScheduledAutomation
+        };
+
+        setScheduledState(newState);
+        localStorage.setItem(
+          "scheduledAutomationState",
+          JSON.stringify(newState),
+        );
+
+        toast({
+          title: "✅ Immediate Run Complete + Scheduler Active",
+          description: `First cycle complete! Now running every ${settings.scheduledAutomation.intervalMinutes} minutes with ${settings.scheduledAutomation.batchSize} posts per batch`,
+          status: "success",
+          duration: 5000,
+          isClosable: true,
+        });
+      } catch (error) {
+        toast({
+          title: "Immediate Run Failed",
+          description:
+            "Failed to run immediate automation, but scheduler will still start",
+          status: "warning",
+          duration: 5000,
+        });
+
+        // Still start the scheduler even if immediate run fails
+        const newState = {
+          isActive: true,
+          nextRunTime: new Date().getTime() + intervalMs,
+          timeRemaining: intervalMs,
+          currentCycle: 0,
+          totalProcessed: 0,
+        };
+
+        setScheduledState(newState);
+        localStorage.setItem(
+          "scheduledAutomationState",
+          JSON.stringify(newState),
+        );
+      }
+    } else {
+      // Standard behavior - wait for first interval
+      const newState = {
+        isActive: true,
+        nextRunTime: new Date().getTime() + intervalMs,
+        timeRemaining: intervalMs,
+        currentCycle: 0,
+        totalProcessed: 0,
+      };
+
+      setScheduledState(newState);
+      localStorage.setItem(
+        "scheduledAutomationState",
+        JSON.stringify(newState),
+      );
+
+      toast({
+        title: "🕐 Scheduled Automation Started",
+        description: `Will run every ${settings.scheduledAutomation.intervalMinutes} minutes with ${settings.scheduledAutomation.batchSize} posts per batch`,
+        status: "success",
+        duration: 5000,
+        isClosable: true,
+      });
+    }
+  };
+
+  const stopScheduledAutomation = () => {
+    setScheduledState({
+      isActive: false,
+      nextRunTime: null,
+      timeRemaining: 0,
+      currentCycle: 0,
+      totalProcessed: 0,
+    });
+    localStorage.removeItem("scheduledAutomationState");
+
+    toast({
+      title: "⏹️ Scheduled Automation Stopped",
+      description: "Automatic processing has been disabled",
+      status: "info",
+      duration: 3000,
+    });
+  };
+
   // const replyToAllPosts = async () => {
   //   const postsWithComments = posts.filter(
   //     (post) =>
@@ -653,7 +952,13 @@ function App() {
 
             <TabPanels>
               <TabPanel px={0}>
-                <Settings settings={settings} onUpdate={handleSettingsUpdate} />
+                <Settings
+                  settings={settings}
+                  onUpdate={handleSettingsUpdate}
+                  scheduledState={scheduledState}
+                  onStartScheduled={startScheduledAutomation}
+                  onStopScheduled={stopScheduledAutomation}
+                />
               </TabPanel>
               <TabPanel px={0}>
                 <PostsTable
@@ -669,6 +974,9 @@ function App() {
                   onEnjoyAutomationAll={enjoyAutomationAll}
                   loading={loading}
                   hasSettings={!!settings.googleSheetUrl}
+                  scheduledState={scheduledState}
+                  onStartScheduled={startScheduledAutomation}
+                  onStopScheduled={stopScheduledAutomation}
                 />
               </TabPanel>
             </TabPanels>

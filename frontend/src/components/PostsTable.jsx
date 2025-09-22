@@ -43,6 +43,9 @@ function PostsTable({
   onEnjoyAutomationAll,
   loading,
   hasSettings,
+  scheduledState,
+  onStartScheduled,
+  onStopScheduled,
 }) {
   const getStatusColor = (status) => {
     switch (status) {
@@ -100,6 +103,49 @@ function PostsTable({
                 </Text>
               </Box>
               <VStack spacing={8}>
+                {/* Scheduled Automation Status */}
+                {scheduledState.isActive && (
+                  <Box
+                    bg="green.50"
+                    border="2px"
+                    borderColor="green.200"
+                    rounded="xl"
+                    p={4}
+                    w="full"
+                    textAlign="center"
+                  >
+                    <HStack justify="center" spacing={4}>
+                      <Badge
+                        colorScheme="green"
+                        variant="solid"
+                        px={3}
+                        py={1}
+                        rounded="full"
+                      >
+                        🟢 Scheduled Automation Active
+                      </Badge>
+                      <Text fontSize="sm" color="green.700" fontFamily="mono">
+                        Next run in:{" "}
+                        {Math.floor(scheduledState.timeRemaining / 60000)}:
+                        {String(
+                          Math.floor(
+                            (scheduledState.timeRemaining % 60000) / 1000,
+                          ),
+                        ).padStart(2, "0")}
+                      </Text>
+                      <Button
+                        size="sm"
+                        colorScheme="red"
+                        variant="outline"
+                        onClick={onStopScheduled}
+                        leftIcon={<Box as="span">⏹️</Box>}
+                      >
+                        Stop
+                      </Button>
+                    </HStack>
+                  </Box>
+                )}
+
                 <Button
                   colorScheme="purple"
                   variant="solid"
@@ -200,6 +246,26 @@ function PostsTable({
                       >
                         Auto Reply All
                       </Button>
+
+                      {!scheduledState.isActive && (
+                        <Button
+                          colorScheme="teal"
+                          onClick={onStartScheduled}
+                          isLoading={loading}
+                          loadingText="Starting Schedule..."
+                          size="lg"
+                          rounded="xl"
+                          shadow="md"
+                          _hover={{
+                            transform: "translateY(-1px)",
+                            shadow: "lg",
+                          }}
+                          leftIcon={<Box as="span">🕐</Box>}
+                          px={8}
+                        >
+                          Start Scheduler
+                        </Button>
+                      )}
                     </>
                   )}
                 </HStack>

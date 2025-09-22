@@ -18,14 +18,39 @@ import {
   NumberIncrementStepper,
   NumberDecrementStepper,
   Textarea,
+  Grid,
+  GridItem,
+  Switch,
+  HStack,
 } from "@chakra-ui/react";
+import ScheduledAutomation from "./ScheduledAutomation";
 
-function Settings({ settings, onUpdate }) {
+function Settings({
+  settings,
+  onUpdate,
+  scheduledState,
+  onStartScheduled,
+  onStopScheduled,
+}) {
   const [localSettings, setLocalSettings] = useState(settings);
   const toast = useToast();
 
   const handleInputChange = (field, value) => {
     setLocalSettings({ ...localSettings, [field]: value });
+  };
+
+  const handleScheduledSettingChange = (field, value) => {
+    setLocalSettings({
+      ...localSettings,
+      scheduledAutomation: {
+        enabled: false,
+        intervalMinutes: 20,
+        batchSize: 10,
+        startImmediately: true,
+        ...localSettings.scheduledAutomation,
+        [field]: value,
+      },
+    });
   };
 
   const handleSave = () => {
@@ -49,16 +74,25 @@ function Settings({ settings, onUpdate }) {
   };
 
   return (
-    <Box maxW="5xl" mx="auto" px={4}>
+    <Box maxW="7xl" mx="auto" px={4}>
       <VStack spacing={8} align="stretch">
         <Box textAlign="center" mb={6}>
           <Heading size="xl" mb={4} color="gray.700">
             🔧 Configuration Settings
           </Heading>
           <Text color="gray.600" fontSize="lg" maxW="2xl" mx="auto">
-            Configure your Google Sheets connection and AI provider settings
+            Configure your Google Sheets connection, AI provider settings, and
+            scheduled automation
           </Text>
         </Box>
+
+        {/* Scheduled Automation Component */}
+        <ScheduledAutomation
+          scheduledState={scheduledState}
+          settings={localSettings}
+          onStartScheduled={onStartScheduled}
+          onStopScheduled={onStopScheduled}
+        />
 
         <Card
           shadow="lg"
@@ -271,6 +305,163 @@ function Settings({ settings, onUpdate }) {
 
                   <Text fontSize="md" color="gray.500" mt={3} pl={2}>
                     🔒 API keys are configured securely on the server
+                  </Text>
+                </VStack>
+              </Box>
+
+              {/* Scheduled Automation Settings */}
+              <Box
+                bg="purple.50"
+                p={8}
+                rounded="2xl"
+                border="2px"
+                borderColor="purple.100"
+              >
+                <Heading size="lg" mb={6} color="gray.700">
+                  🕐 Scheduled Automation Settings
+                </Heading>
+                <VStack spacing={6}>
+                  <Grid templateColumns="repeat(2, 1fr)" gap={6} w="full">
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel
+                          fontSize="lg"
+                          fontWeight="bold"
+                          color="gray.700"
+                          mb={3}
+                        >
+                          ⏱️ Interval (Minutes)
+                        </FormLabel>
+                        <NumberInput
+                          value={
+                            localSettings.scheduledAutomation
+                              ?.intervalMinutes || 20
+                          }
+                          onChange={(_valueString, valueNumber) =>
+                            handleScheduledSettingChange(
+                              "intervalMinutes",
+                              valueNumber,
+                            )
+                          }
+                          min={5}
+                          max={1440}
+                          size="lg"
+                        >
+                          <NumberInputField
+                            rounded="xl"
+                            bg="white"
+                            border="2px"
+                            borderColor="purple.200"
+                            _hover={{ borderColor: "purple.300" }}
+                            _focus={{
+                              borderColor: "purple.400",
+                              boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
+                            }}
+                            py={6}
+                            fontSize="md"
+                            fontWeight="medium"
+                          />
+                          <NumberInputStepper>
+                            <NumberIncrementStepper />
+                            <NumberDecrementStepper />
+                          </NumberInputStepper>
+                        </NumberInput>
+                        <Text fontSize="sm" color="gray.500" mt={2}>
+                          How often to run automation (5-1440 minutes)
+                        </Text>
+                      </FormControl>
+                    </GridItem>
+
+                    <GridItem>
+                      <FormControl>
+                        <FormLabel
+                          fontSize="lg"
+                          fontWeight="bold"
+                          color="gray.700"
+                          mb={3}
+                        >
+                          📦 Batch Size
+                        </FormLabel>
+                        <NumberInput
+                          value={
+                            localSettings.scheduledAutomation?.batchSize || 10
+                          }
+                          onChange={(_valueString, valueNumber) =>
+                            handleScheduledSettingChange(
+                              "batchSize",
+                              valueNumber,
+                            )
+                          }
+                          min={1}
+                          max={50}
+                          size="lg"
+                        >
+                          <NumberInputField
+                            rounded="xl"
+                            bg="white"
+                            border="2px"
+                            borderColor="purple.200"
+                            _hover={{ borderColor: "purple.300" }}
+                            _focus={{
+                              borderColor: "purple.400",
+                              boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
+                            }}
+                            py={6}
+                            fontSize="md"
+                            fontWeight="medium"
+                          />
+                          <NumberInputStepper>
+                            <NumberIncrementStepper />
+                            <NumberDecrementStepper />
+                          </NumberInputStepper>
+                        </NumberInput>
+                        <Text fontSize="sm" color="gray.500" mt={2}>
+                          Posts to process per automation run (1-50)
+                        </Text>
+                      </FormControl>
+                    </GridItem>
+                  </Grid>
+
+                  <FormControl>
+                    <HStack justify="space-between" align="center">
+                      <Box>
+                        <FormLabel
+                          fontSize="lg"
+                          fontWeight="bold"
+                          color="gray.700"
+                          mb={1}
+                        >
+                          🚀 Start Immediately
+                        </FormLabel>
+                        <Text fontSize="sm" color="gray.500">
+                          Run automation immediately when starting scheduler
+                          (instead of waiting for first interval)
+                        </Text>
+                      </Box>
+                      <Switch
+                        size="lg"
+                        colorScheme="purple"
+                        isChecked={
+                          localSettings.scheduledAutomation?.startImmediately ?? true
+                        }
+                        onChange={(e) =>
+                          handleScheduledSettingChange(
+                            "startImmediately",
+                            e.target.checked,
+                          )
+                        }
+                      />
+                    </HStack>
+                  </FormControl>
+
+                  <Text
+                    fontSize="sm"
+                    color="purple.700"
+                    textAlign="center"
+                    mt={4}
+                  >
+                    💡 Scheduled automation will process posts in batches to
+                    avoid overwhelming the system
                   </Text>
                 </VStack>
               </Box>
