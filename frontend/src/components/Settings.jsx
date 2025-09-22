@@ -143,8 +143,8 @@ function Settings({ settings, onUpdate }) {
                       fontWeight="medium"
                     >
                       <option value="gemini">✨ Google Gemini</option>
-                      <option value="openai">🚀 OpenAI (GPT-4)</option>
-                      <option value="anthropic">🧠 Anthropic (Claude)</option>
+                      {/* <option value="openai">🚀 OpenAI (GPT-4)</option> */}
+                      {/* <option value="anthropic">🧠 Anthropic (Claude)</option> */}
                     </Select>
                   </FormControl>
 
@@ -205,7 +205,7 @@ function Settings({ settings, onUpdate }) {
                       onChange={(_valueString, valueNumber) =>
                         handleInputChange("commentMaxLength", valueNumber)
                       }
-                      min={1}
+                      max={1000}
                       size="lg"
                     >
                       <NumberInputField
