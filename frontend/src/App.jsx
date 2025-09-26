@@ -1,5 +1,5 @@
 /* eslint-disable no-unused-vars */
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Box,
   Container,
@@ -19,58 +19,14 @@ import axios from "axios";
 
 // When running with Docker, use relative path for API calls (nginx will proxy to backend)
 // When running locally without Docker, use localhost:3001
-const API_URL = window.location.hostname === 'localhost' && window.location.port !== '80' && window.location.port !== ''
-  ? "http://localhost:3001/api"  // Development mode (npm run dev)
-  : "/api";  // Production/Docker mode (nginx proxy)
+const API_URL =
+  window.location.hostname === "localhost" &&
+  window.location.port !== "80" &&
+  window.location.port !== ""
+    ? "http://localhost:3001/api" // Development mode (npm run dev)
+    : "/api"; // Production/Docker mode (nginx proxy)
 
 axios.defaults.withCredentials = true;
-
-// Mock data for demonstration
-// const mockPosts = [
-//   {
-//     id: 1,
-//     url: "https://twitter.com/elonmusk/status/1234567890",
-//     content:
-//       "The future of AI is incredibly exciting! We're making great progress with neural networks and machine learning algorithms.",
-//     comment:
-//       "Absolutely agree! The advancements in AI technology are truly remarkable. Looking forward to seeing how this transforms various industries.",
-//     status: "commented",
-//   },
-//   {
-//     id: 2,
-//     url: "https://twitter.com/sundarpichai/status/1234567891",
-//     content:
-//       "Google's latest breakthrough in quantum computing represents a major milestone in computational science.",
-//     comment: "",
-//     status: "pending",
-//   },
-//   {
-//     id: 3,
-//     url: "https://twitter.com/satyanadella/status/1234567892",
-//     content:
-//       "Microsoft Azure's new AI capabilities are empowering developers worldwide to build more intelligent applications.",
-//     comment:
-//       "This is fantastic news! Azure's AI tools have been incredibly helpful for our development team. Excited to try the new features.",
-//     status: "replied",
-//   },
-//   {
-//     id: 4,
-//     url: "https://twitter.com/jeffbezos/status/1234567893",
-//     content:
-//       "Blue Origin's latest mission was a success! Space exploration continues to push the boundaries of human achievement.",
-//     comment:
-//       "Congratulations on another successful mission! Space exploration is truly inspiring and opens up so many possibilities for humanity.",
-//     status: "commented",
-//   },
-//   {
-//     id: 5,
-//     url: "https://twitter.com/tim_cook/status/1234567894",
-//     content:
-//       "Apple's commitment to privacy and user security remains our top priority as we innovate with new technologies.",
-//     comment: "",
-//     status: "pending",
-//   },
-// ];
 
 function App() {
   const [posts, setPosts] = useState([]);
@@ -103,33 +59,6 @@ function App() {
     loadSavedSettings();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-
-  // Timer effect for scheduled automation
-  useEffect(() => {
-    let interval;
-
-    if (scheduledState.isActive && scheduledState.nextRunTime) {
-      interval = setInterval(() => {
-        const now = new Date().getTime();
-        const timeLeft = scheduledState.nextRunTime - now;
-
-        if (timeLeft <= 0) {
-          // Time to run automation
-          runScheduledAutomation();
-        } else {
-          // Update countdown
-          setScheduledState((prev) => ({
-            ...prev,
-            timeRemaining: timeLeft,
-          }));
-        }
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [scheduledState.isActive, scheduledState.nextRunTime]);
 
   // Load scheduled automation state from localStorage
   useEffect(() => {
@@ -616,124 +545,7 @@ function App() {
     }
   };
 
-  const runScheduledAutomation = async (isImmediateRun = false) => {
-    try {
-      const batchSize = settings.scheduledAutomation.batchSize || 10;
-
-      // Fetch current posts to work with
-      let currentPosts = posts;
-      if (currentPosts.length === 0) {
-        const fetchResponse = await axios.post(
-          `${API_URL}/google-sheets/fetch`,
-          {
-            sheetUrl: settings.googleSheetUrl,
-          },
-        );
-        currentPosts = fetchResponse.data.posts;
-        setPosts(currentPosts);
-      }
-
-      // Find posts that need processing (pending or have content but no comments)
-      const postsToProcess = currentPosts
-        .filter(
-          (post) =>
-            post.status === "pending" ||
-            (post.content && (!post.comment || post.comment.trim() === "")),
-        )
-        .slice(0, batchSize);
-
-      if (postsToProcess.length === 0) {
-        if (!isImmediateRun) {
-          toast({
-            title: "Scheduled Run Complete",
-            description: "No posts require processing at this time.",
-            status: "info",
-            duration: 3000,
-          });
-          scheduleNextRun();
-        }
-        return;
-      }
-
-      toast({
-        title: `🤖 Scheduled Automation Running`,
-        description: `Processing ${postsToProcess.length} posts...`,
-        status: "info",
-        duration: 3000,
-      });
-
-      const postIds = postsToProcess.map((post) => post.id);
-
-      // Step 1: Scrape content if needed
-      const postsNeedingScraping = postsToProcess.filter(
-        (post) => !post.content,
-      );
-      if (postsNeedingScraping.length > 0) {
-        await axios.post(`${API_URL}/scraper/scrape-posts`, {
-          postIds: postsNeedingScraping.map((p) => p.id),
-          maxTabs: settings.maxTabs || 5,
-        });
-      }
-
-      // Step 2: Generate comments
-      const postsNeedingComments = postsToProcess.filter(
-        (post) => !post.comment || post.comment.trim() === "",
-      );
-      if (postsNeedingComments.length > 0) {
-        await axios.post(`${API_URL}/ai/generate-bulk`, {
-          postIds: postsNeedingComments.map((p) => p.id),
-          provider: settings.aiProvider,
-          maxLength: settings.commentMaxLength || 50,
-          additionalPrompt: settings.additionalPrompt || "",
-        });
-      }
-
-      // Step 3: Auto-reply
-      await axios.post(`${API_URL}/auto-reply/batch`, {
-        postIds,
-      });
-
-      // Refresh posts
-      const postsResponse = await axios.get(`${API_URL}/posts/current`);
-      setPosts(postsResponse.data.posts);
-
-      // Update scheduled state
-      setScheduledState((prev) => ({
-        ...prev,
-        currentCycle: prev.currentCycle + 1,
-        totalProcessed: prev.totalProcessed + postsToProcess.length,
-      }));
-
-      if (!isImmediateRun) {
-        toast({
-          title: "✅ Scheduled Run Complete",
-          description: `Processed ${postsToProcess.length} posts successfully!`,
-          status: "success",
-          duration: 5000,
-          isClosable: true,
-        });
-
-        scheduleNextRun();
-      }
-    } catch (error) {
-      if (!isImmediateRun) {
-        toast({
-          title: "Scheduled Automation Error",
-          description:
-            error.response?.data?.message || "Error during scheduled run",
-          status: "error",
-          duration: 5000,
-          isClosable: true,
-        });
-        scheduleNextRun();
-      } else {
-        // For immediate runs, just throw the error to be handled by the caller
-        throw error;
-      }
-    }
-  };
-
-  const scheduleNextRun = () => {
+  const scheduleNextRun = useCallback(() => {
     const intervalMs =
       (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
     const nextRunTime = new Date().getTime() + intervalMs;
@@ -746,7 +558,168 @@ function App() {
 
     setScheduledState(newState);
     localStorage.setItem("scheduledAutomationState", JSON.stringify(newState));
-  };
+  }, [scheduledState, settings.scheduledAutomation.intervalMinutes]);
+
+  const runScheduledAutomation = useCallback(
+    async (isImmediateRun = false) => {
+      try {
+        const batchSize = settings.scheduledAutomation.batchSize || 10;
+
+        // Fetch current posts to work with
+        let currentPosts = posts;
+        if (currentPosts.length === 0) {
+          const fetchResponse = await axios.post(
+            `${API_URL}/google-sheets/fetch`,
+            {
+              sheetUrl: settings.googleSheetUrl,
+            },
+          );
+          currentPosts = fetchResponse.data.posts;
+          setPosts(currentPosts);
+        }
+
+        // Find posts that need processing (pending or have content but no comments)
+        const postsToProcess = currentPosts
+          .filter(
+            (post) =>
+              post.status === "pending" ||
+              (post.content && (!post.comment || post.comment.trim() === "")),
+          )
+          .slice(0, batchSize);
+
+        if (postsToProcess.length === 0) {
+          if (!isImmediateRun) {
+            toast({
+              title: "Scheduled Run Complete",
+              description: "No posts require processing at this time.",
+              status: "info",
+              duration: 3000,
+            });
+            scheduleNextRun();
+          }
+          return;
+        }
+
+        toast({
+          title: `🤖 Scheduled Automation Running`,
+          description: `Processing ${postsToProcess.length} posts...`,
+          status: "info",
+          duration: 3000,
+        });
+
+        const postIds = postsToProcess.map((post) => post.id);
+
+        // Step 1: Scrape content if needed
+        const postsNeedingScraping = postsToProcess.filter(
+          (post) => !post.content,
+        );
+        if (postsNeedingScraping.length > 0) {
+          await axios.post(`${API_URL}/scraper/scrape-posts`, {
+            postIds: postsNeedingScraping.map((p) => p.id),
+            maxTabs: settings.maxTabs || 5,
+          });
+        }
+
+        // Step 2: Generate comments
+        const postsNeedingComments = postsToProcess.filter(
+          (post) => !post.comment || post.comment.trim() === "",
+        );
+        if (postsNeedingComments.length > 0) {
+          await axios.post(`${API_URL}/ai/generate-bulk`, {
+            postIds: postsNeedingComments.map((p) => p.id),
+            provider: settings.aiProvider,
+            maxLength: settings.commentMaxLength || 50,
+            additionalPrompt: settings.additionalPrompt || "",
+          });
+        }
+
+        // Step 3: Auto-reply
+        await axios.post(`${API_URL}/auto-reply/batch`, {
+          postIds,
+        });
+
+        // Refresh posts
+        const postsResponse = await axios.get(`${API_URL}/posts/current`);
+        setPosts(postsResponse.data.posts);
+
+        // Update scheduled state
+        setScheduledState((prev) => ({
+          ...prev,
+          currentCycle: prev.currentCycle + 1,
+          totalProcessed: prev.totalProcessed + postsToProcess.length,
+        }));
+
+        if (!isImmediateRun) {
+          toast({
+            title: "✅ Scheduled Run Complete",
+            description: `Processed ${postsToProcess.length} posts successfully!`,
+            status: "success",
+            duration: 5000,
+            isClosable: true,
+          });
+
+          scheduleNextRun();
+        }
+      } catch (error) {
+        if (!isImmediateRun) {
+          toast({
+            title: "Scheduled Automation Error",
+            description:
+              error.response?.data?.message || "Error during scheduled run",
+            status: "error",
+            duration: 5000,
+            isClosable: true,
+          });
+          scheduleNextRun();
+        } else {
+          // For immediate runs, just throw the error to be handled by the caller
+          throw error;
+        }
+      }
+    },
+    [
+      posts,
+      scheduleNextRun,
+      settings.additionalPrompt,
+      settings.aiProvider,
+      settings.commentMaxLength,
+      settings.googleSheetUrl,
+      settings.maxTabs,
+      settings.scheduledAutomation.batchSize,
+      toast,
+    ],
+  );
+
+  // Timer effect for scheduled automation
+  useEffect(() => {
+    let interval;
+
+    if (scheduledState.isActive && scheduledState.nextRunTime) {
+      interval = setInterval(() => {
+        const now = new Date().getTime();
+        const timeLeft = scheduledState.nextRunTime - now;
+
+        if (timeLeft <= 0) {
+          // Time to run automation
+          runScheduledAutomation();
+        } else {
+          // Update countdown
+          setScheduledState((prev) => ({
+            ...prev,
+            timeRemaining: timeLeft,
+          }));
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [
+    runScheduledAutomation,
+    scheduledState.isActive,
+    scheduledState.nextRunTime,
+  ]);
 
   const startScheduledAutomation = async () => {
     const shouldStartImmediately =
