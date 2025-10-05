@@ -52,7 +52,7 @@ function parseCookies(cookiesInput) {
 }
 
 // Fetch tweet data from Twitter API
-async function fetchTweetData(tweetId, cookies) {
+async function fetchTweetData(tweetId, cookies, bearerToken) {
   const variables = {
     tweetId: tweetId,
     includePromotedContent: true,
@@ -106,6 +106,7 @@ async function fetchTweetData(tweetId, cookies) {
   const { cookieString, ct0 } = parseCookies(cookies);
   const csrfToken = ct0;
 
+  // Use provided bearer token or default one
   const url = `https://x.com/i/api/graphql/URPP6YZ5eDCjdVMSREn4gg/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(features))}&fieldToggles=${encodeURIComponent(JSON.stringify(fieldToggles))}`;
 
   try {
@@ -113,8 +114,7 @@ async function fetchTweetData(tweetId, cookies) {
       headers: {
         accept: '*/*',
         'accept-language': 'en-US,en;q=0.9',
-        authorization:
-          'Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk8LF81IUq16cHjhLTvJu4FA33AGWWjCpTnA',
+        authorization: bearerToken,
         'cache-control': 'no-cache',
         'content-type': 'application/json',
         dnt: '1',
@@ -236,7 +236,7 @@ router.post('/fetch', async (req, res) => {
 // New route: Fetch from Google Sheets + Call Twitter API in parallel
 router.post('/fetch-with-twitter-api', async (req, res) => {
   try {
-    const { sheetUrl, cookies } = req.body;
+    const { sheetUrl, cookies, bearerToken } = req.body;
 
     if (!sheetUrl) {
       return res.status(400).json({
@@ -303,7 +303,7 @@ router.post('/fetch-with-twitter-api', async (req, res) => {
         };
       }
 
-      const tweetData = await fetchTweetData(tweetId, cookies);
+      const tweetData = await fetchTweetData(tweetId, cookies, bearerToken);
 
       if (tweetData.success) {
         return {

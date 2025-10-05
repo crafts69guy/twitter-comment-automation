@@ -38,6 +38,7 @@ function App() {
     commentMaxLength: 50,
     additionalPrompt: "",
     twitterCookies: "",
+    twitterBearerToken: "",
     scheduledAutomation: {
       enabled: false,
       intervalMinutes: 20,
@@ -151,6 +152,7 @@ function App() {
         {
           sheetUrl: settings.googleSheetUrl,
           cookies: settings.twitterCookies,
+          bearerToken: settings.twitterBearerToken,
         },
       );
       setPosts(response.data.posts);

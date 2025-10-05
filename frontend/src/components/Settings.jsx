@@ -140,42 +140,87 @@ function Settings({
                 </FormControl>
               </Box>
 
-              <Box>
-                <FormControl>
-                  <FormLabel
-                    fontSize="xl"
-                    fontWeight="bold"
-                    color="gray.700"
-                    mb={4}
-                  >
-                    🍪 Twitter Cookies (Optional)
-                  </FormLabel>
-                  <Textarea
-                    placeholder="Paste your Twitter cookies here for Twitter API access (e.g., auth_token=...; ct0=...; twid=...)"
-                    value={localSettings.twitterCookies || ""}
-                    onChange={(e) =>
-                      handleInputChange("twitterCookies", e.target.value)
-                    }
-                    size="lg"
-                    rounded="xl"
-                    bg="gray.50"
-                    border="2px"
-                    borderColor="gray.200"
-                    _hover={{ bg: "white", borderColor: "blue.300" }}
-                    _focus={{
-                      bg: "white",
-                      borderColor: "blue.400",
-                      boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
-                    }}
-                    py={4}
-                    fontSize="md"
-                    rows={3}
-                    resize="vertical"
-                  />
-                  <Text fontSize="md" color="gray.500" mt={3} pl={2}>
-                    💡 Required for direct Twitter API access. Leave empty to use Puppeteer scraping instead.
-                  </Text>
-                </FormControl>
+              <Box
+                bg="green.50"
+                p={8}
+                rounded="2xl"
+                border="2px"
+                borderColor="green.100"
+              >
+                <Heading size="lg" mb={6} color="gray.700">
+                  🐦 Twitter API Configuration
+                </Heading>
+                <VStack spacing={6}>
+                  <FormControl>
+                    <FormLabel
+                      fontSize="xl"
+                      fontWeight="bold"
+                      color="gray.700"
+                      mb={4}
+                    >
+                      🔑 Bearer Token
+                    </FormLabel>
+                    <Input
+                      placeholder="Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUej..."
+                      value={localSettings.twitterBearerToken || ""}
+                      onChange={(e) =>
+                        handleInputChange("twitterBearerToken", e.target.value)
+                      }
+                      size="lg"
+                      rounded="xl"
+                      bg="white"
+                      border="2px"
+                      borderColor="green.200"
+                      _hover={{ borderColor: "green.300" }}
+                      _focus={{
+                        borderColor: "green.400",
+                        boxShadow: "0 0 0 3px rgba(72, 187, 120, 0.1)",
+                      }}
+                      py={6}
+                      fontSize="md"
+                      type="password"
+                    />
+                    <Text fontSize="md" color="gray.500" mt={3} pl={2}>
+                      💡 Twitter API Bearer token for authentication
+                    </Text>
+                  </FormControl>
+
+                  <FormControl>
+                    <FormLabel
+                      fontSize="xl"
+                      fontWeight="bold"
+                      color="gray.700"
+                      mb={4}
+                    >
+                      🍪 Twitter Cookies
+                    </FormLabel>
+                    <Textarea
+                      placeholder="Paste your Twitter cookies here (JSON format from browser extension or cookie string)"
+                      value={localSettings.twitterCookies || ""}
+                      onChange={(e) =>
+                        handleInputChange("twitterCookies", e.target.value)
+                      }
+                      size="lg"
+                      rounded="xl"
+                      bg="white"
+                      border="2px"
+                      borderColor="green.200"
+                      _hover={{ borderColor: "green.300" }}
+                      _focus={{
+                        borderColor: "green.400",
+                        boxShadow: "0 0 0 3px rgba(72, 187, 120, 0.1)",
+                      }}
+                      py={4}
+                      fontSize="md"
+                      rows={3}
+                      resize="vertical"
+                    />
+                    <Text fontSize="md" color="gray.500" mt={3} pl={2}>
+                      💡 Required for direct Twitter API access. Leave empty to
+                      use Puppeteer scraping instead.
+                    </Text>
+                  </FormControl>
+                </VStack>
               </Box>
 
               <Box
