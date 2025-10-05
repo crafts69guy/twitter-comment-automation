@@ -308,6 +308,9 @@ router.post('/fetch-and-generate', async (req, res) => {
       }
     }
 
+    // Update session with posts including generated comments
+    req.userSession.posts = postsWithComments;
+
     // Calculate stats
     const successCount = postsWithComments.filter(p => !p.twitterApiError).length;
     const errorCount = postsWithComments.filter(p => p.twitterApiError).length;

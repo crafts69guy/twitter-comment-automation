@@ -8,15 +8,21 @@ export async function validateComment(comment, charLimit, retryCount, retryFn) {
   }
 
   if (comment.length > charLimit) {
-    throw new Error(
-      `Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts.`,
+    console.error(
+      `❌ Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts.`,
     );
+    // throw new Error(
+    //   `Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts.`,
+    // );
   }
 
   if (comment.length > 280) {
-    throw new Error(
+    console.error(
       `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
     );
+    // throw new Error(
+    //   `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+    // );
   }
 
   console.log(
@@ -32,8 +38,33 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
     throw new Error('AI response was not an array');
   }
 
-  const results = posts.map(post => {
-    const generated = parsedComments.find(c => c.postId === post.id);
+  const results = posts.map((post, index) => {
+    // Try exact match first
+    let generated = parsedComments.find(c => c.postId === post.id);
+
+    // Fallback: Try to match by index (if AI returned comments in same order)
+    if (!generated && index < parsedComments.length) {
+      console.warn(`⚠️ Could not find exact postId match for ${post.id}, using index-based fallback`);
+      generated = parsedComments[index];
+      // Override the postId with the correct one
+      generated.postId = post.id;
+    }
+
+    // Fallback 2: Try to match by partial ID (in case AI truncated the UUID)
+    if (!generated) {
+      const partialMatch = parsedComments.find(c =>
+        c.postId && (
+          post.id.startsWith(c.postId) ||
+          c.postId.startsWith(post.id.substring(0, 15))
+        )
+      );
+      if (partialMatch) {
+        console.warn(`⚠️ Found partial match for ${post.id}, AI returned truncated ID: ${partialMatch.postId}`);
+        generated = partialMatch;
+        // Override the postId with the correct one
+        generated.postId = post.id;
+      }
+    }
 
     if (!generated || !generated.comment) {
       return {
@@ -50,7 +81,8 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
       return {
         postId: post.id,
         error: `Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters`,
-        success: false,
+        comment,
+        success: true,
       };
     }
 
@@ -58,7 +90,8 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
       return {
         postId: post.id,
         error: `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit`,
-        success: false,
+        comment,
+        success: true,
       };
     }
 

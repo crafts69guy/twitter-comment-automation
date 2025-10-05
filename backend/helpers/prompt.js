@@ -24,9 +24,15 @@ export function buildBulkPrompt(posts, charLimit, customInstructions) {
   const postsText = posts
     .map(
       (post, index) =>
-        `[POST_${index + 1}] ID: ${post.id}\nAuthor: ${post.author || post.authorName || 'Unknown'}\nContent: "${post.content}"`,
+        `[POST_${index + 1}]\nID: ${post.id}\nAuthor: ${post.author || post.authorName || 'Unknown'}\nContent: "${post.content}"`,
     )
     .join('\n\n');
+
+  // Create example format with actual post IDs for clarity
+  const exampleFormat = posts
+    .slice(0, Math.min(2, posts.length))
+    .map(post => `  {"postId": "${post.id}", "comment": "your reply here"}`)
+    .join(',\n');
 
   return `Generate thoughtful, engaging Twitter replies for the following ${posts.length} posts. Each reply should be:
 - Professional and respectful
@@ -39,11 +45,17 @@ export function buildBulkPrompt(posts, charLimit, customInstructions) {
 Posts to reply to:
 ${postsText}
 
-IMPORTANT: Return your response as a valid JSON array with this exact format:
+🚨 CRITICAL INSTRUCTIONS FOR JSON RESPONSE:
+1. Return EXACTLY ${posts.length} comments in a JSON array
+2. Keep the EXACT SAME ORDER as the posts above (POST_1, POST_2, etc.)
+3. Copy the COMPLETE postId EXACTLY as shown (full UUID, do not truncate or modify)
+4. Each postId is a unique identifier - copy it character-by-character without any changes
+5. Generate ONLY the JSON array, no additional text, no markdown code blocks, no explanations, no emoji.
+
+Required JSON format (use these EXACT postId values):
 [
-  {"postId": "post-id-1", "comment": "your reply here"},
-  {"postId": "post-id-2", "comment": "your reply here"}
+${exampleFormat}${posts.length > 2 ? ',\n  ...' : ''}
 ]
 
-Generate ONLY the JSON array, no additional text, no markdown code blocks, no explanations. Each comment MUST be under ${charLimit} characters.`;
+Each comment MUST be under ${charLimit} characters. Return ONLY valid JSON.`;
 }

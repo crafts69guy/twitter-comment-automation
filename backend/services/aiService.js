@@ -155,7 +155,14 @@ export async function generateComment(post, provider, apiKey, maxLength, additio
 }
 
 // Bulk generate comments for multiple posts - OPTIMIZED SINGLE API CALL
-export async function generateBulkComments(posts, provider, apiKey, maxLength, additionalPrompt) {
+export async function generateBulkComments(
+  posts,
+  provider,
+  apiKey,
+  maxLength,
+  additionalPrompt,
+  retryCount = 0,
+) {
   if (!posts || posts.length === 0) {
     return [];
   }
@@ -223,6 +230,7 @@ export async function generateBulkComments(posts, provider, apiKey, maxLength, a
         throw new Error(`Invalid AI provider: ${provider}`);
     }
 
+    console.log('responseText', responseText);
     // Parse the JSON response
     // Remove markdown code blocks if present
     responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
@@ -237,39 +245,33 @@ export async function generateBulkComments(posts, provider, apiKey, maxLength, a
 
     // Validate and map results using helper
     const results = validateBulkComments(parsedComments, posts, charLimit);
+    console.log('results', results);
 
     return results;
   } catch (error) {
     console.error('Bulk AI generation error:', error.message);
 
-    // Fallback to individual generation if bulk fails
-    console.log('⚠️ Bulk generation failed, falling back to individual API calls...');
-    const results = await Promise.all(
-      posts.map(async post => {
-        try {
-          const comment = await generateComment(
-            post,
-            provider,
-            apiKey,
-            maxLength,
-            additionalPrompt,
-          );
-          return {
-            postId: post.id,
-            comment,
-            success: true,
-          };
-        } catch (error) {
-          console.error(`Error generating comment for post ${post.id}:`, error.message);
-          return {
-            postId: post.id,
-            error: error.message,
-            success: false,
-          };
-        }
-      }),
-    );
+    // Retry with delay if under retry limit
+    if (retryCount < 2) {
+      const delayMs = (retryCount + 1) * 2000; // 2s, 4s
+      console.log(
+        `⚠️ Bulk generation failed, retrying in ${delayMs / 1000}s (attempt ${retryCount + 1}/2)...`,
+      );
 
-    return results;
+      await new Promise(resolve => setTimeout(resolve, delayMs));
+
+      return generateBulkComments(
+        posts,
+        provider,
+        apiKey,
+        maxLength,
+        additionalPrompt,
+        retryCount + 1,
+      );
+    }
+
+    // After all retries exhausted, throw error
+    console.error('❌ Bulk generation failed after all retries');
+    throw error;
   }
 }

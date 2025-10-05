@@ -403,6 +403,35 @@ class PuppeteerService {
       // Wait for page to load
       await new Promise((resolve) => setTimeout(resolve, 3000));
 
+      // Try to like the post first
+      try {
+        // Get the first cellInnerDiv (the main post, not replies)
+        const firstCell = await page.$('[data-testid="cellInnerDiv"]');
+
+        if (firstCell) {
+          // Check if post is already liked (data-testid="unlike")
+          const unlikeButton = await firstCell.$('[data-testid="unlike"]');
+
+          if (unlikeButton) {
+            console.log("Post already liked, skipping");
+          } else {
+            // Post not liked yet, find and click like button
+            const likeButton = await firstCell.$('[data-testid="like"]');
+            if (likeButton) {
+              await likeButton.click();
+              console.log("Post liked successfully");
+              await new Promise((resolve) => setTimeout(resolve, 1000));
+            } else {
+              console.log("Like button not found, continuing with reply");
+            }
+          }
+        } else {
+          console.log("Post cell not found, continuing with reply");
+        }
+      } catch (error) {
+        console.log(`Failed to like post: ${error.message}, continuing with reply`);
+      }
+
       // Try to find and click the reply button
       const replySelectors = [
         '[data-testid="tweetTextarea_0"][role="textbox"]',
