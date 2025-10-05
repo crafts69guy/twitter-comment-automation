@@ -191,15 +191,15 @@ function PostsTable({
                     colorScheme="teal"
                     onClick={onFetchPostsWithTwitterAPI}
                     isLoading={loading}
-                    loadingText="Fetching with Twitter API..."
+                    loadingText="Fetching & Generating..."
                     size="lg"
                     rounded="xl"
                     shadow="md"
                     _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                    leftIcon={<Box as="span">🐦</Box>}
+                    leftIcon={<Box as="span">🚀</Box>}
                     px={8}
                   >
-                    Fetch with Twitter API
+                    Fetch & Generate All
                   </Button>
                   {posts && posts.length > 0 && (
                     <>

@@ -8,6 +8,7 @@ import scraperRouter from "./routes/scraper.js";
 import aiRouter from "./routes/ai.js";
 import postsRouter from "./routes/posts.js";
 import autoReplyRouter from "./routes/autoReply.js";
+import automationRouter from "./routes/automation.js";
 
 dotenv.config();
 
@@ -64,6 +65,7 @@ app.use("/api/scraper", scraperRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/auto-reply", autoReplyRouter);
+app.use("/api/automation", automationRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", sessionId: req.session.userId });

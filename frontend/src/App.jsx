@@ -148,11 +148,14 @@ function App() {
     setLoading(true);
     try {
       const response = await axios.post(
-        `${API_URL}/google-sheets/fetch-with-twitter-api`,
+        `${API_URL}/automation/fetch-and-generate`,
         {
           sheetUrl: settings.googleSheetUrl,
           cookies: settings.twitterCookies,
           bearerToken: settings.twitterBearerToken,
+          aiProvider: settings.aiProvider,
+          maxLength: settings.commentMaxLength,
+          additionalPrompt: settings.additionalPrompt,
         },
       );
       setPosts(response.data.posts);
@@ -164,7 +167,7 @@ function App() {
         title: hasErrors ? "Posts Fetched with Warnings" : "Posts Fetched Successfully",
         description: response.data.message,
         status: hasErrors ? "warning" : "success",
-        duration: 5000,
+        duration: 6000,
         isClosable: true,
       });
     } catch (error) {
