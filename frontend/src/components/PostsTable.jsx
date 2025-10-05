@@ -16,61 +16,46 @@ import {
   HStack,
   VStack,
   Link,
-  IconButton,
-  Tooltip,
   Spinner,
   Alert,
   AlertIcon,
   AlertDescription,
-} from "@chakra-ui/react";
-import {
-  ExternalLinkIcon,
-  ChatIcon,
-  CheckIcon,
-  RepeatIcon,
-} from "@chakra-ui/icons";
+} from '@chakra-ui/react';
+import { ExternalLinkIcon } from '@chakra-ui/icons';
 
 function PostsTable({
   posts,
-  onFetchPosts,
   onFetchPostsWithTwitterAPI,
-  onScrapeContent,
-  onGenerateComment,
-  onGenerateAllComments,
-  onReply,
-  // onReplyAll,
-  onAutoReply,
   onAutoReplyAll,
-  onEnjoyAutomationAll,
   loading,
   hasSettings,
   scheduledState,
   onStartScheduled,
   onStopScheduled,
 }) {
-  const getStatusColor = (status) => {
+  const getStatusColor = status => {
     switch (status) {
-      case "pending":
-        return "gray";
-      case "commented":
-        return "yellow";
-      case "replied":
-        return "green";
+      case 'pending':
+        return 'gray';
+      case 'commented':
+        return 'yellow';
+      case 'replied':
+        return 'green';
       default:
-        return "gray";
+        return 'gray';
     }
   };
 
-  const getStatusText = (status) => {
+  const getStatusText = status => {
     switch (status) {
-      case "pending":
-        return "Pending";
-      case "commented":
-        return "Comment Ready";
-      case "replied":
-        return "Replied";
+      case 'pending':
+        return 'Pending';
+      case 'commented':
+        return 'Comment Ready';
+      case 'replied':
+        return 'Replied';
       default:
-        return "Unknown";
+        return 'Unknown';
     }
   };
 
@@ -116,23 +101,15 @@ function PostsTable({
                     textAlign="center"
                   >
                     <HStack justify="center" spacing={4}>
-                      <Badge
-                        colorScheme="green"
-                        variant="solid"
-                        px={3}
-                        py={1}
-                        rounded="full"
-                      >
+                      <Badge colorScheme="green" variant="solid" px={3} py={1} rounded="full">
                         🟢 Scheduled Automation Active
                       </Badge>
                       <Text fontSize="sm" color="green.700" fontFamily="mono">
-                        Next run in:{" "}
-                        {Math.floor(scheduledState.timeRemaining / 60000)}:
-                        {String(
-                          Math.floor(
-                            (scheduledState.timeRemaining % 60000) / 1000,
-                          ),
-                        ).padStart(2, "0")}
+                        Next run in: {Math.floor(scheduledState.timeRemaining / 60000)}:
+                        {String(Math.floor((scheduledState.timeRemaining % 60000) / 1000)).padStart(
+                          2,
+                          '0',
+                        )}
                       </Text>
                       <Button
                         size="sm"
@@ -147,46 +124,7 @@ function PostsTable({
                   </Box>
                 )}
 
-                <Button
-                  colorScheme="purple"
-                  variant="solid"
-                  onClick={onEnjoyAutomationAll}
-                  isLoading={loading}
-                  loadingText="Automating Everything..."
-                  size="xl"
-                  rounded="xl"
-                  shadow="lg"
-                  leftIcon={<Box as="span">🚀</Box>}
-                  px={12}
-                  py={6}
-                  fontSize="lg"
-                  fontWeight="bold"
-                  bgGradient="linear(to-r, purple.500, pink.500)"
-                  _hover={{
-                    bgGradient: "linear(to-r, purple.600, pink.600)",
-                    transform: "translateY(-2px)",
-                    shadow: "xl",
-                  }}
-                  color="white"
-                >
-                  🎉 Enjoy Automation Everything
-                </Button>
-
                 <HStack spacing={4} wrap="wrap">
-                  <Button
-                    colorScheme="blue"
-                    onClick={onFetchPosts}
-                    isLoading={loading}
-                    loadingText="Fetching..."
-                    size="lg"
-                    rounded="xl"
-                    shadow="md"
-                    _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                    leftIcon={<Box as="span">🔄</Box>}
-                    px={8}
-                  >
-                    Fetch Posts
-                  </Button>
                   <Button
                     colorScheme="teal"
                     onClick={onFetchPostsWithTwitterAPI}
@@ -195,58 +133,13 @@ function PostsTable({
                     size="lg"
                     rounded="xl"
                     shadow="md"
-                    _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                    leftIcon={<Box as="span">🚀</Box>}
+                    _hover={{ transform: 'translateY(-1px)', shadow: 'lg' }}
                     px={8}
                   >
                     Fetch & Generate All
                   </Button>
                   {posts && posts.length > 0 && (
                     <>
-                      <Button
-                        colorScheme="purple"
-                        onClick={onScrapeContent}
-                        isLoading={loading}
-                        loadingText="Scraping..."
-                        size="lg"
-                        rounded="xl"
-                        shadow="md"
-                        _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                        leftIcon={<Box as="span">🕷️</Box>}
-                        px={8}
-                      >
-                        Scrape Content
-                      </Button>
-                      <Button
-                        colorScheme="green"
-                        onClick={onGenerateAllComments}
-                        isLoading={loading}
-                        loadingText="Generating..."
-                        size="lg"
-                        rounded="xl"
-                        shadow="md"
-                        _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
-                        leftIcon={<Box as="span">🤖</Box>}
-                        px={8}
-                      >
-                        Generate All Comments
-                      </Button>
-
-                      {/* <Button */}
-                      {/*   colorScheme="orange" */}
-                      {/*   onClick={onReplyAll} */}
-                      {/*   isLoading={loading} */}
-                      {/*   loadingText="Replying..." */}
-                      {/*   size="lg" */}
-                      {/*   rounded="xl" */}
-                      {/*   shadow="md" */}
-                      {/*   _hover={{ transform: "translateY(-1px)", shadow: "lg" }} */}
-                      {/*   leftIcon={<Box as="span">📤</Box>} */}
-                      {/*   px={8} */}
-                      {/* > */}
-                      {/*   Reply All */}
-                      {/* </Button> */}
-
                       <Button
                         colorScheme="red"
                         onClick={onAutoReplyAll}
@@ -255,7 +148,7 @@ function PostsTable({
                         size="lg"
                         rounded="xl"
                         shadow="md"
-                        _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                        _hover={{ transform: 'translateY(-1px)', shadow: 'lg' }}
                         leftIcon={<Box as="span">🤖</Box>}
                         px={8}
                       >
@@ -272,8 +165,8 @@ function PostsTable({
                           rounded="xl"
                           shadow="md"
                           _hover={{
-                            transform: "translateY(-1px)",
-                            shadow: "lg",
+                            transform: 'translateY(-1px)',
+                            shadow: 'lg',
                           }}
                           leftIcon={<Box as="span">🕐</Box>}
                           px={8}
@@ -306,13 +199,7 @@ function PostsTable({
         ) : (
           <>
             {/* Statistics Card */}
-            <Card
-              shadow="md"
-              rounded="xl"
-              border="1px"
-              borderColor="blue.200"
-              bg="blue.50"
-            >
+            <Card shadow="md" rounded="xl" border="1px" borderColor="blue.200" bg="blue.50">
               <CardBody p={6}>
                 <HStack justify="space-around" wrap="wrap">
                   <VStack>
@@ -325,7 +212,7 @@ function PostsTable({
                   </VStack>
                   <VStack>
                     <Text fontSize="2xl" fontWeight="bold" color="yellow.600">
-                      {posts.filter((p) => p?.status === "pending").length}
+                      {posts.filter(p => p?.status === 'pending').length}
                     </Text>
                     <Text fontSize="sm" color="gray.600">
                       Pending
@@ -333,7 +220,7 @@ function PostsTable({
                   </VStack>
                   <VStack>
                     <Text fontSize="2xl" fontWeight="bold" color="orange.600">
-                      {posts.filter((p) => p?.status === "commented").length}
+                      {posts.filter(p => p?.status === 'commented').length}
                     </Text>
                     <Text fontSize="sm" color="gray.600">
                       Comments Ready
@@ -341,7 +228,7 @@ function PostsTable({
                   </VStack>
                   <VStack>
                     <Text fontSize="2xl" fontWeight="bold" color="green.600">
-                      {posts.filter((p) => p?.status === "replied").length}
+                      {posts.filter(p => p?.status === 'replied').length}
                     </Text>
                     <Text fontSize="sm" color="gray.600">
                       Replied
@@ -350,9 +237,7 @@ function PostsTable({
                   <VStack>
                     <Text fontSize="2xl" fontWeight="bold" color="purple.600">
                       {Math.round(
-                        (posts.filter((p) => p?.status === "replied").length /
-                          posts.length) *
-                          100,
+                        (posts.filter(p => p?.status === 'replied').length / posts.length) * 100,
                       ) || 0}
                       %
                     </Text>
@@ -400,42 +285,29 @@ function PostsTable({
                         >
                           📊 Status
                         </Th>
-                        <Th
-                          width="15%"
-                          color="gray.700"
-                          fontWeight="bold"
-                          fontSize="md"
-                          py={6}
-                          px={6}
-                        >
-                          ⚡ Actions
-                        </Th>
                       </Tr>
                     </Thead>
                     <Tbody>
                       {posts &&
                         posts.length > 0 &&
-                        posts.map((post) => (
-                          <Tr
-                            key={post?.id || Math.random()}
-                            _hover={{ bg: "gray.50" }}
-                          >
+                        posts.map(post => (
+                          <Tr key={post?.id || Math.random()} _hover={{ bg: 'gray.50' }}>
                             <Td py={6} px={6}>
                               <VStack align="start" spacing={3}>
                                 <Link
-                                  href={post?.url || "#"}
+                                  href={post?.url || '#'}
                                   isExternal
                                   color="blue.600"
                                   fontSize="md"
                                   fontWeight="medium"
                                   _hover={{
-                                    color: "blue.700",
-                                    textDecoration: "underline",
+                                    color: 'blue.700',
+                                    textDecoration: 'underline',
                                   }}
                                 >
                                   {post?.url && post.url.length > 60
                                     ? `${post.url.substring(0, 60)}...`
-                                    : post?.url || "No URL"}
+                                    : post?.url || 'No URL'}
                                   <ExternalLinkIcon ml={2} />
                                 </Link>
                                 {post?.content && (
@@ -459,11 +331,7 @@ function PostsTable({
                                   border="1px"
                                   borderColor="blue.200"
                                 >
-                                  <Text
-                                    fontSize="sm"
-                                    noOfLines={4}
-                                    lineHeight="1.5"
-                                  >
+                                  <Text fontSize="sm" noOfLines={4} lineHeight="1.5">
                                     {post?.comment}
                                   </Text>
                                 </Box>
@@ -476,11 +344,7 @@ function PostsTable({
                                   borderColor="gray.200"
                                   textAlign="center"
                                 >
-                                  <Text
-                                    fontSize="sm"
-                                    color="gray.500"
-                                    fontStyle="italic"
-                                  >
+                                  <Text fontSize="sm" color="gray.500" fontStyle="italic">
                                     💭 No comment generated yet
                                   </Text>
                                 </Box>
@@ -497,62 +361,6 @@ function PostsTable({
                               >
                                 {getStatusText(post?.status)}
                               </Badge>
-                            </Td>
-                            <Td py={6} px={6}>
-                              <VStack spacing={2}>
-                                {!post?.comment && (
-                                  <Tooltip label="Generate AI comment" hasArrow>
-                                    <IconButton
-                                      aria-label="Generate comment"
-                                      icon={<ChatIcon />}
-                                      size="md"
-                                      colorScheme="blue"
-                                      variant="solid"
-                                      rounded="lg"
-                                      onClick={() =>
-                                        onGenerateComment(post?.id)
-                                      }
-                                      _hover={{ transform: "scale(1.05)" }}
-                                    />
-                                  </Tooltip>
-                                )}
-
-                                {post?.comment &&
-                                  post?.status !== "replied" && (
-                                    <>
-                                      <Tooltip
-                                        label="Manual reply (copy to clipboard)"
-                                        hasArrow
-                                      >
-                                        <IconButton
-                                          aria-label="Reply to post"
-                                          icon={<CheckIcon />}
-                                          size="md"
-                                          colorScheme="green"
-                                          variant="solid"
-                                          rounded="lg"
-                                          onClick={() => onReply(post?.id)}
-                                          _hover={{ transform: "scale(1.05)" }}
-                                        />
-                                      </Tooltip>
-                                      <Tooltip
-                                        label="Auto-reply (automated posting)"
-                                        hasArrow
-                                      >
-                                        <IconButton
-                                          aria-label="Auto-reply to post"
-                                          icon={<Box as="span">🤖</Box>}
-                                          size="md"
-                                          colorScheme="red"
-                                          variant="solid"
-                                          rounded="lg"
-                                          onClick={() => onAutoReply(post?.id)}
-                                          _hover={{ transform: "scale(1.05)" }}
-                                        />
-                                      </Tooltip>
-                                    </>
-                                  )}
-                              </VStack>
                             </Td>
                           </Tr>
                         ))}
