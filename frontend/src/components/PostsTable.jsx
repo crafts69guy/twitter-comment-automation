@@ -33,6 +33,7 @@ import {
 function PostsTable({
   posts,
   onFetchPosts,
+  onFetchPostsWithTwitterAPI,
   onScrapeContent,
   onGenerateComment,
   onGenerateAllComments,
@@ -185,6 +186,20 @@ function PostsTable({
                     px={8}
                   >
                     Fetch Posts
+                  </Button>
+                  <Button
+                    colorScheme="teal"
+                    onClick={onFetchPostsWithTwitterAPI}
+                    isLoading={loading}
+                    loadingText="Fetching with Twitter API..."
+                    size="lg"
+                    rounded="xl"
+                    shadow="md"
+                    _hover={{ transform: "translateY(-1px)", shadow: "lg" }}
+                    leftIcon={<Box as="span">🐦</Box>}
+                    px={8}
+                  >
+                    Fetch with Twitter API
                   </Button>
                   {posts && posts.length > 0 && (
                     <>

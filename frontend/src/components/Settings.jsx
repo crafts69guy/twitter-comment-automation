@@ -140,6 +140,44 @@ function Settings({
                 </FormControl>
               </Box>
 
+              <Box>
+                <FormControl>
+                  <FormLabel
+                    fontSize="xl"
+                    fontWeight="bold"
+                    color="gray.700"
+                    mb={4}
+                  >
+                    🍪 Twitter Cookies (Optional)
+                  </FormLabel>
+                  <Textarea
+                    placeholder="Paste your Twitter cookies here for Twitter API access (e.g., auth_token=...; ct0=...; twid=...)"
+                    value={localSettings.twitterCookies || ""}
+                    onChange={(e) =>
+                      handleInputChange("twitterCookies", e.target.value)
+                    }
+                    size="lg"
+                    rounded="xl"
+                    bg="gray.50"
+                    border="2px"
+                    borderColor="gray.200"
+                    _hover={{ bg: "white", borderColor: "blue.300" }}
+                    _focus={{
+                      bg: "white",
+                      borderColor: "blue.400",
+                      boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                    }}
+                    py={4}
+                    fontSize="md"
+                    rows={3}
+                    resize="vertical"
+                  />
+                  <Text fontSize="md" color="gray.500" mt={3} pl={2}>
+                    💡 Required for direct Twitter API access. Leave empty to use Puppeteer scraping instead.
+                  </Text>
+                </FormControl>
+              </Box>
+
               <Box
                 bg="blue.50"
                 p={8}

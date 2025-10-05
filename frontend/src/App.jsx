@@ -37,6 +37,7 @@ function App() {
     maxTabs: 5,
     commentMaxLength: 50,
     additionalPrompt: "",
+    twitterCookies: "",
     scheduledAutomation: {
       enabled: false,
       intervalMinutes: 20,
@@ -134,6 +135,42 @@ function App() {
         description:
           error.response?.data?.message ||
           "Failed to fetch posts from Google Sheets",
+        status: "error",
+        duration: 5000,
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchPostsWithTwitterAPI = async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(
+        `${API_URL}/google-sheets/fetch-with-twitter-api`,
+        {
+          sheetUrl: settings.googleSheetUrl,
+          cookies: settings.twitterCookies,
+        },
+      );
+      setPosts(response.data.posts);
+
+      const { stats } = response.data;
+      const hasErrors = stats.twitterApiErrors > 0;
+
+      toast({
+        title: hasErrors ? "Posts Fetched with Warnings" : "Posts Fetched Successfully",
+        description: response.data.message,
+        status: hasErrors ? "warning" : "success",
+        duration: 5000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: "Error Fetching Posts",
+        description:
+          error.response?.data?.message ||
+          "Failed to fetch posts with Twitter API",
         status: "error",
         duration: 5000,
       });
@@ -941,6 +978,7 @@ function App() {
                 <PostsTable
                   posts={posts}
                   onFetchPosts={fetchPosts}
+                  onFetchPostsWithTwitterAPI={fetchPostsWithTwitterAPI}
                   onScrapeContent={scrapeContent}
                   onGenerateComment={generateComment}
                   onGenerateAllComments={generateAllComments}
