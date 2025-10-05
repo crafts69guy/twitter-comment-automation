@@ -1,4 +1,3 @@
-import { useState } from "react";
 import {
   Box,
   Button,
@@ -22,55 +21,50 @@ import {
   GridItem,
   Switch,
   HStack,
-} from "@chakra-ui/react";
-import ScheduledAutomation from "./ScheduledAutomation";
+  Badge,
+} from '@chakra-ui/react';
+import ScheduledAutomation from './ScheduledAutomation';
+import { useSettings } from '../hooks/useLocalStorageSync';
 
-function Settings({
-  settings,
-  onUpdate,
-  scheduledState,
-  onStartScheduled,
-  onStopScheduled,
-}) {
-  const [localSettings, setLocalSettings] = useState(settings);
+function Settings({ settings, onUpdate, scheduledState, onStartScheduled, onStopScheduled }) {
   const toast = useToast();
 
-  const handleInputChange = (field, value) => {
-    setLocalSettings({ ...localSettings, [field]: value });
-  };
-
-  const handleScheduledSettingChange = (field, value) => {
-    setLocalSettings({
-      ...localSettings,
-      scheduledAutomation: {
-        enabled: false,
-        intervalMinutes: 20,
-        batchSize: 10,
-        startImmediately: true,
-        ...localSettings.scheduledAutomation,
-        [field]: value,
-      },
-    });
-  };
+  const {
+    settings: localSettings,
+    hasUnsavedChanges,
+    updateSetting,
+    updateScheduledSetting,
+    saveSettings,
+  } = useSettings(settings, onUpdate);
 
   const handleSave = () => {
     if (!localSettings.googleSheetUrl) {
       toast({
-        title: "Missing Google Sheet URL",
-        description: "Please enter a Google Sheet URL",
-        status: "warning",
+        title: 'Missing Google Sheet URL',
+        description: 'Please enter a Google Sheet URL',
+        status: 'warning',
         duration: 3000,
       });
       return;
     }
 
-    onUpdate(localSettings);
-    toast({
-      title: "Settings Saved",
-      description: "Your settings have been saved successfully",
-      status: "success",
-      duration: 3000,
-    });
+    const success = saveSettings();
+
+    if (success) {
+      toast({
+        title: 'Settings Saved',
+        description: 'Your settings have been saved successfully',
+        status: 'success',
+        duration: 3000,
+      });
+    } else {
+      toast({
+        title: 'Save Failed',
+        description: 'Failed to save settings to localStorage',
+        status: 'error',
+        duration: 3000,
+      });
+    }
   };
 
   return (
@@ -81,8 +75,7 @@ function Settings({
             🔧 Configuration Settings
           </Heading>
           <Text color="gray.600" fontSize="lg" maxW="2xl" mx="auto">
-            Configure your Google Sheets connection, AI provider settings, and
-            scheduled automation
+            Configure your Google Sheets connection, AI provider settings, and scheduled automation
           </Text>
         </Box>
 
@@ -94,87 +87,60 @@ function Settings({
           onStopScheduled={onStopScheduled}
         />
 
-        <Card
-          shadow="lg"
-          rounded="2xl"
-          border="1px"
-          borderColor="gray.200"
-          overflow="hidden"
-        >
+        <Card shadow="lg" rounded="2xl" border="1px" borderColor="gray.200" overflow="hidden">
           <CardBody p={12}>
             <VStack spacing={10} align="stretch">
               <Box>
                 <FormControl isRequired>
-                  <FormLabel
-                    fontSize="xl"
-                    fontWeight="bold"
-                    color="gray.700"
-                    mb={4}
-                  >
+                  <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                     📊 Google Sheet URL
                   </FormLabel>
                   <Input
                     placeholder="https://docs.google.com/spreadsheets/d/your-sheet-id/edit"
                     value={localSettings.googleSheetUrl}
-                    onChange={(e) =>
-                      handleInputChange("googleSheetUrl", e.target.value)
-                    }
+                    onChange={e => updateSetting('googleSheetUrl', e.target.value)}
                     size="lg"
                     rounded="xl"
                     bg="gray.50"
                     border="2px"
                     borderColor="gray.200"
-                    _hover={{ bg: "white", borderColor: "blue.300" }}
+                    _hover={{ bg: 'white', borderColor: 'blue.300' }}
                     _focus={{
-                      bg: "white",
-                      borderColor: "blue.400",
-                      boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                      bg: 'white',
+                      borderColor: 'blue.400',
+                      boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.1)',
                     }}
                     py={6}
                     fontSize="md"
                   />
                   <Text fontSize="md" color="gray.500" mt={3} pl={2}>
-                    💡 The Google Sheet should have Twitter post URLs in the
-                    first column
+                    💡 The Google Sheet should have Twitter post URLs in the first column
                   </Text>
                 </FormControl>
               </Box>
 
-              <Box
-                bg="green.50"
-                p={8}
-                rounded="2xl"
-                border="2px"
-                borderColor="green.100"
-              >
+              <Box bg="green.50" p={8} rounded="2xl" border="2px" borderColor="green.100">
                 <Heading size="lg" mb={6} color="gray.700">
                   🐦 Twitter API Configuration
                 </Heading>
                 <VStack spacing={6}>
                   <FormControl>
-                    <FormLabel
-                      fontSize="xl"
-                      fontWeight="bold"
-                      color="gray.700"
-                      mb={4}
-                    >
+                    <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                       🔑 Bearer Token
                     </FormLabel>
                     <Input
                       placeholder="Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUej..."
-                      value={localSettings.twitterBearerToken || ""}
-                      onChange={(e) =>
-                        handleInputChange("twitterBearerToken", e.target.value)
-                      }
+                      value={localSettings.twitterBearerToken || ''}
+                      onChange={e => updateSetting('twitterBearerToken', e.target.value)}
                       size="lg"
                       rounded="xl"
                       bg="white"
                       border="2px"
                       borderColor="green.200"
-                      _hover={{ borderColor: "green.300" }}
+                      _hover={{ borderColor: 'green.300' }}
                       _focus={{
-                        borderColor: "green.400",
-                        boxShadow: "0 0 0 3px rgba(72, 187, 120, 0.1)",
+                        borderColor: 'green.400',
+                        boxShadow: '0 0 0 3px rgba(72, 187, 120, 0.1)',
                       }}
                       py={6}
                       fontSize="md"
@@ -186,29 +152,22 @@ function Settings({
                   </FormControl>
 
                   <FormControl>
-                    <FormLabel
-                      fontSize="xl"
-                      fontWeight="bold"
-                      color="gray.700"
-                      mb={4}
-                    >
+                    <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                       🍪 Twitter Cookies
                     </FormLabel>
                     <Textarea
                       placeholder="Paste your Twitter cookies here (JSON format from browser extension or cookie string)"
-                      value={localSettings.twitterCookies || ""}
-                      onChange={(e) =>
-                        handleInputChange("twitterCookies", e.target.value)
-                      }
+                      value={localSettings.twitterCookies || ''}
+                      onChange={e => updateSetting('twitterCookies', e.target.value)}
                       size="lg"
                       rounded="xl"
                       bg="white"
                       border="2px"
                       borderColor="green.200"
-                      _hover={{ borderColor: "green.300" }}
+                      _hover={{ borderColor: 'green.300' }}
                       _focus={{
-                        borderColor: "green.400",
-                        boxShadow: "0 0 0 3px rgba(72, 187, 120, 0.1)",
+                        borderColor: 'green.400',
+                        boxShadow: '0 0 0 3px rgba(72, 187, 120, 0.1)',
                       }}
                       py={4}
                       fontSize="md"
@@ -216,44 +175,31 @@ function Settings({
                       resize="vertical"
                     />
                     <Text fontSize="md" color="gray.500" mt={3} pl={2}>
-                      💡 Required for direct Twitter API access. Leave empty to
-                      use Puppeteer scraping instead.
+                      💡 Required for direct Twitter API access. Leave empty to use Puppeteer
+                      scraping instead.
                     </Text>
                   </FormControl>
                 </VStack>
               </Box>
 
-              <Box
-                bg="blue.50"
-                p={8}
-                rounded="2xl"
-                border="2px"
-                borderColor="blue.100"
-              >
+              <Box bg="blue.50" p={8} rounded="2xl" border="2px" borderColor="blue.100">
                 <VStack spacing={8}>
                   <FormControl isRequired>
-                    <FormLabel
-                      fontSize="xl"
-                      fontWeight="bold"
-                      color="gray.700"
-                      mb={4}
-                    >
+                    <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                       🤖 AI Provider
                     </FormLabel>
                     <Select
                       value={localSettings.aiProvider}
-                      onChange={(e) =>
-                        handleInputChange("aiProvider", e.target.value)
-                      }
+                      onChange={e => updateSetting('aiProvider', e.target.value)}
                       size="lg"
                       rounded="xl"
                       bg="white"
                       border="2px"
                       borderColor="blue.200"
-                      _hover={{ borderColor: "blue.300" }}
+                      _hover={{ borderColor: 'blue.300' }}
                       _focus={{
-                        borderColor: "blue.400",
-                        boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                        borderColor: 'blue.400',
+                        boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.1)',
                       }}
                       py={6}
                       fontSize="md"
@@ -266,18 +212,13 @@ function Settings({
                   </FormControl>
 
                   <FormControl>
-                    <FormLabel
-                      fontSize="xl"
-                      fontWeight="bold"
-                      color="gray.700"
-                      mb={4}
-                    >
+                    <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                       🚀 Max Parallel Tabs
                     </FormLabel>
                     <NumberInput
                       value={localSettings.maxTabs || 5}
                       onChange={(_valueString, valueNumber) =>
-                        handleInputChange("maxTabs", valueNumber)
+                        updateSetting('maxTabs', valueNumber)
                       }
                       min={1}
                       max={20}
@@ -288,10 +229,10 @@ function Settings({
                         bg="white"
                         border="2px"
                         borderColor="blue.200"
-                        _hover={{ borderColor: "blue.300" }}
+                        _hover={{ borderColor: 'blue.300' }}
                         _focus={{
-                          borderColor: "blue.400",
-                          boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                          borderColor: 'blue.400',
+                          boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.1)',
                         }}
                         py={6}
                         fontSize="md"
@@ -303,24 +244,18 @@ function Settings({
                       </NumberInputStepper>
                     </NumberInput>
                     <Text fontSize="md" color="gray.500" mt={3} pl={2}>
-                      💡 Number of Puppeteer tabs to use for parallel scraping
-                      (1-20)
+                      💡 Number of Puppeteer tabs to use for parallel scraping (1-20)
                     </Text>
                   </FormControl>
 
                   <FormControl>
-                    <FormLabel
-                      fontSize="xl"
-                      fontWeight="bold"
-                      color="gray.700"
-                      mb={4}
-                    >
+                    <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                       ✏️ Comment Character Limit
                     </FormLabel>
                     <NumberInput
                       value={localSettings.commentMaxLength || 50}
                       onChange={(_valueString, valueNumber) =>
-                        handleInputChange("commentMaxLength", valueNumber)
+                        updateSetting('commentMaxLength', valueNumber)
                       }
                       max={1000}
                       size="lg"
@@ -330,10 +265,10 @@ function Settings({
                         bg="white"
                         border="2px"
                         borderColor="blue.200"
-                        _hover={{ borderColor: "blue.300" }}
+                        _hover={{ borderColor: 'blue.300' }}
                         _focus={{
-                          borderColor: "blue.400",
-                          boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                          borderColor: 'blue.400',
+                          boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.1)',
                         }}
                         py={6}
                         fontSize="md"
@@ -345,35 +280,27 @@ function Settings({
                       </NumberInputStepper>
                     </NumberInput>
                     <Text fontSize="md" color="gray.500" mt={3} pl={2}>
-                      💡 Maximum characters for AI-generated comments. Default:
-                      280
+                      💡 Maximum characters for AI-generated comments. Default: 280
                     </Text>
                   </FormControl>
 
                   <FormControl>
-                    <FormLabel
-                      fontSize="xl"
-                      fontWeight="bold"
-                      color="gray.700"
-                      mb={4}
-                    >
+                    <FormLabel fontSize="xl" fontWeight="bold" color="gray.700" mb={4}>
                       📝 Additional AI Instructions
                     </FormLabel>
                     <Textarea
                       placeholder="e.g., Be friendly and professional. Include emojis. Ask questions to encourage engagement."
-                      value={localSettings.additionalPrompt || ""}
-                      onChange={(e) =>
-                        handleInputChange("additionalPrompt", e.target.value)
-                      }
+                      value={localSettings.additionalPrompt || ''}
+                      onChange={e => updateSetting('additionalPrompt', e.target.value)}
                       size="lg"
                       rounded="xl"
                       bg="white"
                       border="2px"
                       borderColor="blue.200"
-                      _hover={{ borderColor: "blue.300" }}
+                      _hover={{ borderColor: 'blue.300' }}
                       _focus={{
-                        borderColor: "blue.400",
-                        boxShadow: "0 0 0 3px rgba(66, 153, 225, 0.1)",
+                        borderColor: 'blue.400',
+                        boxShadow: '0 0 0 3px rgba(66, 153, 225, 0.1)',
                       }}
                       py={4}
                       fontSize="md"
@@ -381,8 +308,7 @@ function Settings({
                       resize="vertical"
                     />
                     <Text fontSize="md" color="gray.500" mt={3} pl={2}>
-                      💡 Additional instructions for AI when generating comments
-                      (optional)
+                      💡 Additional instructions for AI when generating comments (optional)
                     </Text>
                   </FormControl>
 
@@ -393,13 +319,7 @@ function Settings({
               </Box>
 
               {/* Scheduled Automation Settings */}
-              <Box
-                bg="purple.50"
-                p={8}
-                rounded="2xl"
-                border="2px"
-                borderColor="purple.100"
-              >
+              <Box bg="purple.50" p={8} rounded="2xl" border="2px" borderColor="purple.100">
                 <Heading size="lg" mb={6} color="gray.700">
                   🕐 Scheduled Automation Settings
                 </Heading>
@@ -407,24 +327,13 @@ function Settings({
                   <Grid templateColumns="repeat(2, 1fr)" gap={6} w="full">
                     <GridItem>
                       <FormControl>
-                        <FormLabel
-                          fontSize="lg"
-                          fontWeight="bold"
-                          color="gray.700"
-                          mb={3}
-                        >
+                        <FormLabel fontSize="lg" fontWeight="bold" color="gray.700" mb={3}>
                           ⏱️ Interval (Minutes)
                         </FormLabel>
                         <NumberInput
-                          value={
-                            localSettings.scheduledAutomation
-                              ?.intervalMinutes || 20
-                          }
+                          value={localSettings.scheduledAutomation?.intervalMinutes || 20}
                           onChange={(_valueString, valueNumber) =>
-                            handleScheduledSettingChange(
-                              "intervalMinutes",
-                              valueNumber,
-                            )
+                            updateScheduledSetting('intervalMinutes', valueNumber)
                           }
                           min={5}
                           max={1440}
@@ -435,10 +344,10 @@ function Settings({
                             bg="white"
                             border="2px"
                             borderColor="purple.200"
-                            _hover={{ borderColor: "purple.300" }}
+                            _hover={{ borderColor: 'purple.300' }}
                             _focus={{
-                              borderColor: "purple.400",
-                              boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
+                              borderColor: 'purple.400',
+                              boxShadow: '0 0 0 3px rgba(147, 51, 234, 0.1)',
                             }}
                             py={6}
                             fontSize="md"
@@ -457,23 +366,13 @@ function Settings({
 
                     <GridItem>
                       <FormControl>
-                        <FormLabel
-                          fontSize="lg"
-                          fontWeight="bold"
-                          color="gray.700"
-                          mb={3}
-                        >
+                        <FormLabel fontSize="lg" fontWeight="bold" color="gray.700" mb={3}>
                           📦 Batch Size
                         </FormLabel>
                         <NumberInput
-                          value={
-                            localSettings.scheduledAutomation?.batchSize || 10
-                          }
+                          value={localSettings.scheduledAutomation?.batchSize || 10}
                           onChange={(_valueString, valueNumber) =>
-                            handleScheduledSettingChange(
-                              "batchSize",
-                              valueNumber,
-                            )
+                            updateScheduledSetting('batchSize', valueNumber)
                           }
                           min={1}
                           max={50}
@@ -484,10 +383,10 @@ function Settings({
                             bg="white"
                             border="2px"
                             borderColor="purple.200"
-                            _hover={{ borderColor: "purple.300" }}
+                            _hover={{ borderColor: 'purple.300' }}
                             _focus={{
-                              borderColor: "purple.400",
-                              boxShadow: "0 0 0 3px rgba(147, 51, 234, 0.1)",
+                              borderColor: 'purple.400',
+                              boxShadow: '0 0 0 3px rgba(147, 51, 234, 0.1)',
                             }}
                             py={6}
                             fontSize="md"
@@ -508,72 +407,77 @@ function Settings({
                   <FormControl>
                     <HStack justify="space-between" align="center">
                       <Box>
-                        <FormLabel
-                          fontSize="lg"
-                          fontWeight="bold"
-                          color="gray.700"
-                          mb={1}
-                        >
+                        <FormLabel fontSize="lg" fontWeight="bold" color="gray.700" mb={1}>
                           🚀 Start Immediately
                         </FormLabel>
                         <Text fontSize="sm" color="gray.500">
-                          Run automation immediately when starting scheduler
-                          (instead of waiting for first interval)
+                          Run automation immediately when starting scheduler (instead of waiting for
+                          first interval)
                         </Text>
                       </Box>
                       <Switch
                         size="lg"
                         colorScheme="purple"
-                        isChecked={
-                          localSettings.scheduledAutomation?.startImmediately ?? true
-                        }
-                        onChange={(e) =>
-                          handleScheduledSettingChange(
-                            "startImmediately",
-                            e.target.checked,
-                          )
-                        }
+                        isChecked={localSettings.scheduledAutomation?.startImmediately ?? true}
+                        onChange={e => updateScheduledSetting('startImmediately', e.target.checked)}
                       />
                     </HStack>
                   </FormControl>
 
-                  <Text
-                    fontSize="sm"
-                    color="purple.700"
-                    textAlign="center"
-                    mt={4}
-                  >
-                    💡 Scheduled automation will process posts in batches to
-                    avoid overwhelming the system
+                  <Text fontSize="sm" color="purple.700" textAlign="center" mt={4}>
+                    💡 Scheduled automation will process posts in batches to avoid overwhelming the
+                    system
                   </Text>
                 </VStack>
               </Box>
 
               <Box pt={8}>
-                <Button
-                  colorScheme="blue"
-                  onClick={handleSave}
-                  size="xl"
-                  width="full"
-                  rounded="2xl"
-                  shadow="lg"
-                  py={8}
-                  fontSize="lg"
-                  fontWeight="bold"
-                  _hover={{
-                    transform: "translateY(-2px)",
-                    shadow: "xl",
-                    bg: "blue.600",
-                  }}
-                  _active={{ transform: "translateY(0)" }}
-                  leftIcon={
-                    <Box as="span" fontSize="xl">
-                      💾
-                    </Box>
-                  }
-                >
-                  Save Configuration
-                </Button>
+                <HStack spacing={4} align="center" justify="space-between">
+                  {hasUnsavedChanges && (
+                    <Badge colorScheme="yellow" fontSize="md" px={3} py={1} rounded="full">
+                      ⚠️ Unsaved Changes (Auto-saving...)
+                    </Badge>
+                  )}
+                  {!hasUnsavedChanges && (
+                    <Badge colorScheme="green" fontSize="md" px={3} py={1} rounded="full">
+                      ✅ All Changes Saved
+                    </Badge>
+                  )}
+                  <Button
+                    colorScheme="blue"
+                    onClick={handleSave}
+                    isDisabled={!hasUnsavedChanges}
+                    size="sm"
+                    rounded="lg"
+                    shadow="sm"
+                    px={12}
+                    py={8}
+                    fontSize="sm"
+                    fontWeight="bold"
+                    _hover={
+                      hasUnsavedChanges
+                        ? {
+                            transform: 'translateY(-2px)',
+                            shadow: 'xl',
+                            bg: 'blue.600',
+                          }
+                        : {}
+                    }
+                    _active={hasUnsavedChanges ? { transform: 'translateY(0)' } : {}}
+                    _disabled={{
+                      opacity: 0.6,
+                      cursor: 'not-allowed',
+                      bg: 'gray.400',
+                    }}
+                    leftIcon={
+                      <Box as="span" fontSize="sm">
+                        💾
+                      </Box>
+                    }
+                  >
+                    Save & Apply
+                  </Button>
+                </HStack>
               </Box>
             </VStack>
           </CardBody>
