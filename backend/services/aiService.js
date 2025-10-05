@@ -1,54 +1,47 @@
 import OpenAI from 'openai';
 import Anthropic from '@anthropic-ai/sdk';
 import { GoogleGenAI } from '@google/genai';
+import { buildBulkPrompt, buildPrompt } from '../helpers/prompt.js';
+import { validateBulkComments, validateComment } from '../helpers/validate.js';
 
-// Helper function to build prompt with retry instructions
-function buildPrompt(post, charLimit, customInstructions, retryCount) {
-  const retryInstructions =
-    retryCount > 0
-      ? `\n- EXTREMELY IMPORTANT: Keep response very brief and concise\n- Use shorter sentences and fewer words\n- Aim for ${Math.max(charLimit - 20, 20)} characters or less`
-      : '';
+// Client instances cache to avoid recreating on every call
+const clientCache = {
+  openai: new Map(),
+  anthropic: new Map(),
+  gemini: new Map(),
+};
 
-  return `Generate a thoughtful, engaging Twitter reply to this post. The reply should be:
-- Professional and respectful
-- Add value to the conversation
-- Be authentic and human-like
-- 🚨 CRITICAL: MUST be under ${charLimit} characters total (count carefully!)
-- Include relevant insights or questions
-- Avoid generic responses${customInstructions}${retryInstructions}
+// Helper to get or create AI client instance
+function getAIClient(provider, apiKey) {
+  const cache = clientCache[provider];
 
-Original post by ${post.author || post.authorName || 'Unknown'}:
-"${post.content}"
-
-Generate only the reply text, no quotes, no emoji or extra formatting. MUST be under ${charLimit} characters:`;
-}
-
-// Helper function to validate and retry comment
-async function validateComment(comment, charLimit, retryCount, retryFn) {
-  if (comment.length > charLimit && retryCount < 2) {
-    console.log(
-      `⚠️ Comment too long (${comment.length} chars), retrying attempt ${retryCount + 1}/2...`,
-    );
-    return await retryFn(retryCount + 1);
+  if (!cache) {
+    throw new Error(`Invalid AI provider: ${provider}`);
   }
 
-  if (comment.length > charLimit) {
-    throw new Error(
-      `Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts.`,
-    );
+  // Return cached instance if exists
+  if (cache.has(apiKey)) {
+    return cache.get(apiKey);
   }
 
-  if (comment.length > 280) {
-    throw new Error(
-      `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
-    );
+  // Create new instance and cache it
+  let client;
+  switch (provider) {
+    case 'openai':
+      client = new OpenAI({ apiKey });
+      break;
+    case 'anthropic':
+      client = new Anthropic({ apiKey });
+      break;
+    case 'gemini':
+      client = new GoogleGenAI({ apiKey });
+      break;
+    default:
+      throw new Error(`Invalid AI provider: ${provider}`);
   }
 
-  console.log(
-    `✅ Comment generated successfully (${comment.length}/${charLimit} chars)${retryCount > 0 ? ` after ${retryCount + 1} attempts` : ''}`,
-  );
-
-  return comment;
+  cache.set(apiKey, client);
+  return client;
 }
 
 // Generate comment using OpenAI
@@ -59,7 +52,7 @@ export async function generateOpenAIComment(
   additionalPrompt = '',
   retryCount = 0,
 ) {
-  const openai = new OpenAI({ apiKey });
+  const openai = getAIClient('openai', apiKey);
   const charLimit = Math.min(maxLength || 280, 280);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
   const prompt = buildPrompt(post, charLimit, customInstructions, retryCount);
@@ -96,7 +89,7 @@ export async function generateAnthropicComment(
   additionalPrompt = '',
   retryCount = 0,
 ) {
-  const anthropic = new Anthropic({ apiKey });
+  const anthropic = getAIClient('anthropic', apiKey);
   const charLimit = Math.min(maxLength || 280, 280);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
   const prompt = buildPrompt(post, charLimit, customInstructions, retryCount);
@@ -127,7 +120,7 @@ export async function generateGeminiComment(
   additionalPrompt = '',
   retryCount = 0,
 ) {
-  const ai = new GoogleGenAI({ apiKey });
+  const ai = getAIClient('gemini', apiKey);
   const charLimit = Math.min(maxLength || 280, 280);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
   const prompt = buildPrompt(post, charLimit, customInstructions, retryCount);
@@ -161,27 +154,122 @@ export async function generateComment(post, provider, apiKey, maxLength, additio
   }
 }
 
-// Bulk generate comments for multiple posts
+// Bulk generate comments for multiple posts - OPTIMIZED SINGLE API CALL
 export async function generateBulkComments(posts, provider, apiKey, maxLength, additionalPrompt) {
-  const results = await Promise.all(
-    posts.map(async post => {
-      try {
-        const comment = await generateComment(post, provider, apiKey, maxLength, additionalPrompt);
-        return {
-          postId: post.id,
-          comment,
-          success: true,
-        };
-      } catch (error) {
-        console.error(`Error generating comment for post ${post.id}:`, error.message);
-        return {
-          postId: post.id,
-          error: error.message,
-          success: false,
-        };
-      }
-    }),
-  );
+  if (!posts || posts.length === 0) {
+    return [];
+  }
 
-  return results;
+  const charLimit = Math.min(maxLength || 280, 280);
+  const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
+
+  // Build a single prompt for all posts using helper
+  const bulkPrompt = buildBulkPrompt(posts, charLimit, customInstructions);
+
+  try {
+    let responseText;
+
+    // Call the appropriate AI provider with the bulk prompt using cached client
+    switch (provider) {
+      case 'openai': {
+        const openai = getAIClient('openai', apiKey);
+        const response = await openai.chat.completions.create({
+          model: 'gpt-4',
+          messages: [
+            {
+              role: 'system',
+              content:
+                'You are a helpful social media assistant that generates thoughtful, engaging Twitter replies. Be professional, authentic, and add value to conversations. NEVER exceed the character limit. Always respond with valid JSON only.',
+            },
+            {
+              role: 'user',
+              content: bulkPrompt,
+            },
+          ],
+          max_tokens: Math.ceil(charLimit * posts.length * 2),
+          temperature: 0.7,
+        });
+        responseText = response.choices[0].message.content.trim();
+        break;
+      }
+
+      case 'anthropic': {
+        const anthropic = getAIClient('anthropic', apiKey);
+        const response = await anthropic.messages.create({
+          model: 'claude-3-5-sonnet-20241022',
+          max_tokens: Math.ceil(charLimit * posts.length * 2),
+          messages: [
+            {
+              role: 'user',
+              content: bulkPrompt,
+            },
+          ],
+        });
+        responseText = response.content[0].text.trim();
+        break;
+      }
+
+      case 'gemini': {
+        const ai = getAIClient('gemini', apiKey);
+        const result = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: bulkPrompt,
+        });
+        responseText = result.text.trim();
+        break;
+      }
+
+      default:
+        throw new Error(`Invalid AI provider: ${provider}`);
+    }
+
+    // Parse the JSON response
+    // Remove markdown code blocks if present
+    responseText = responseText.replace(/```json\s*/g, '').replace(/```\s*/g, '');
+
+    let parsedComments;
+    try {
+      parsedComments = JSON.parse(responseText);
+    } catch (parseError) {
+      console.error('Failed to parse AI response as JSON:', responseText);
+      throw new Error(`AI response was not valid JSON: ${parseError.message}`);
+    }
+
+    // Validate and map results using helper
+    const results = validateBulkComments(parsedComments, posts, charLimit);
+
+    return results;
+  } catch (error) {
+    console.error('Bulk AI generation error:', error.message);
+
+    // Fallback to individual generation if bulk fails
+    console.log('⚠️ Bulk generation failed, falling back to individual API calls...');
+    const results = await Promise.all(
+      posts.map(async post => {
+        try {
+          const comment = await generateComment(
+            post,
+            provider,
+            apiKey,
+            maxLength,
+            additionalPrompt,
+          );
+          return {
+            postId: post.id,
+            comment,
+            success: true,
+          };
+        } catch (error) {
+          console.error(`Error generating comment for post ${post.id}:`, error.message);
+          return {
+            postId: post.id,
+            error: error.message,
+            success: false,
+          };
+        }
+      }),
+    );
+
+    return results;
+  }
 }
