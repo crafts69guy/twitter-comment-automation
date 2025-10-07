@@ -161,5 +161,23 @@ router.get("/status", (req, res) => {
   });
 });
 
+// Cancel auto-reply batch process
+router.post("/cancel", (req, res) => {
+  try {
+    puppeteerService.cancelAutoReplyBatch();
+    res.json({
+      success: true,
+      message: "Auto-reply process cancellation requested",
+    });
+  } catch (error) {
+    console.error("Cancel auto-reply error:", error);
+    res.status(500).json({
+      success: false,
+      message: "Failed to cancel auto-reply process",
+      error: error.message,
+    });
+  }
+});
+
 export default router;
 

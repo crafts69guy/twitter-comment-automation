@@ -6,6 +6,36 @@ class PuppeteerService {
     this.browser = null;
     this.defaultMaxTabs = 5;
     this.activeTabs = new Map(); // Track active tabs by URL
+    this.cancelAutoReply = false; // Flag to cancel auto-reply batch process
+    this.latestTab = null; // Track the most recently used tab
+  }
+
+  async getBrowserStatus() {
+    // Check if browser reference exists and is actually connected
+    let isActuallyOpen = false;
+    if (this.browser) {
+      try {
+        // Try to check if browser is still connected
+        const isConnected = this.browser.isConnected();
+        isActuallyOpen = isConnected;
+
+        // If not connected, clean up the reference
+        if (!isConnected) {
+          this.browser = null;
+          this.activeTabs.clear();
+        }
+      } catch (error) {
+        // If any error occurs, assume browser is closed
+        this.browser = null;
+        this.activeTabs.clear();
+        isActuallyOpen = false;
+      }
+    }
+
+    return {
+      isOpen: isActuallyOpen,
+      activeTabs: this.activeTabs.size,
+    };
   }
 
   async getBrowserStatus() {
@@ -135,6 +165,7 @@ class PuppeteerService {
         // Check if the tab is still valid
         await existingPage.evaluate(() => window.location.href);
         console.log(`Reusing existing tab for: ${baseUrl}`);
+        this.latestTab = existingPage;
         return existingPage;
       } catch (error) {
         // Tab is closed or invalid, remove from map
@@ -154,6 +185,7 @@ class PuppeteerService {
     await page.setViewport({ width: 1920, height: 1080 });
 
     this.activeTabs.set(baseUrl, page);
+    this.latestTab = page;
     console.log(`Created new tab for: ${baseUrl}`);
     return page;
   }
@@ -578,16 +610,40 @@ class PuppeteerService {
         error: error.message,
       };
     } finally {
-      // Don't close the tab - keep it open for reuse
-      // The tab will be managed by the activeTabs Map
-      console.log('Keeping tab open for future reuse');
+      // Close the tab after commenting, but keep the latest one open
+      if (page && page !== this.latestTab) {
+        try {
+          const baseUrl = url.split('?')[0];
+          this.activeTabs.delete(baseUrl);
+          await page.close();
+          console.log(`Closed tab after commenting: ${url}`);
+        } catch (closeError) {
+          console.error('Error closing tab:', closeError.message);
+        }
+      } else if (page === this.latestTab) {
+        console.log('Keeping latest tab open');
+      }
     }
   }
 
   async autoReplyBatch(posts) {
     const results = [];
+    this.cancelAutoReply = false; // Reset cancel flag at start
 
     for (const post of posts) {
+      // Check if cancellation was requested
+      if (this.cancelAutoReply) {
+        console.log('Auto-reply batch cancelled by user');
+        results.push({
+          postId: post.id,
+          url: post.url,
+          success: false,
+          error: 'Process cancelled by user',
+          cancelled: true,
+        });
+        continue;
+      }
+
       if (!post.comment || post.comment.trim() === '') {
         results.push({
           postId: post.id,
@@ -613,6 +669,11 @@ class PuppeteerService {
     }
 
     return results;
+  }
+
+  cancelAutoReplyBatch() {
+    this.cancelAutoReply = true;
+    console.log('Cancel auto-reply batch requested');
   }
 
   async closeAllTabs() {

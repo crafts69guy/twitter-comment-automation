@@ -28,14 +28,15 @@ function PostsTable({
   posts,
   onFetchPostsWithTwitterAPI,
   onAutoReplyAll,
+  onCancelAutoReply,
   loading,
+  isAutoReplying,
   hasSettings,
   scheduledState,
   onStartScheduled,
   onStopScheduled,
   browserStatus,
   onOpenBrowser,
-  onCheckBrowserStatus,
 }) {
   const getStatusColor = status => {
     switch (status) {
@@ -181,20 +182,35 @@ function PostsTable({
                   </Button>
                   {posts && posts.length > 0 && (
                     <>
-                      <Button
-                        colorScheme="red"
-                        onClick={onAutoReplyAll}
-                        isLoading={loading}
-                        loadingText="Auto-Replying..."
-                        size="lg"
-                        rounded="xl"
-                        shadow="md"
-                        _hover={{ transform: 'translateY(-1px)', shadow: 'lg' }}
-                        leftIcon={<Box as="span">🤖</Box>}
-                        px={8}
-                      >
-                        Auto Reply All
-                      </Button>
+                      {!isAutoReplying ? (
+                        <Button
+                          colorScheme="red"
+                          onClick={onAutoReplyAll}
+                          isLoading={loading && !isAutoReplying}
+                          loadingText="Loading..."
+                          size="lg"
+                          rounded="xl"
+                          shadow="md"
+                          _hover={{ transform: 'translateY(-1px)', shadow: 'lg' }}
+                          leftIcon={<Box as="span">🤖</Box>}
+                          px={8}
+                        >
+                          Auto Reply All
+                        </Button>
+                      ) : (
+                        <Button
+                          colorScheme="orange"
+                          onClick={onCancelAutoReply}
+                          size="lg"
+                          rounded="xl"
+                          shadow="md"
+                          _hover={{ transform: 'translateY(-1px)', shadow: 'lg' }}
+                          leftIcon={<Box as="span">⏹️</Box>}
+                          px={8}
+                        >
+                          Cancel Auto Reply
+                        </Button>
+                      )}
 
                       {!scheduledState.isActive && (
                         <Button

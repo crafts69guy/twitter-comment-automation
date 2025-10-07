@@ -47,6 +47,7 @@ function App() {
     },
   });
   const [loading, setLoading] = useState(false);
+  const [isAutoReplying, setIsAutoReplying] = useState(false);
   const [scheduledState, setScheduledState] = useState({
     isActive: false,
     nextRunTime: null,
@@ -160,6 +161,7 @@ function App() {
     }
 
     setLoading(true);
+    setIsAutoReplying(true);
 
     try {
       const postIds = postsWithComments.map(post => post.id);
@@ -171,10 +173,15 @@ function App() {
       const postsResponse = await axios.get(`${API_URL}/posts/current`);
       setPosts(postsResponse.data.posts);
 
+      // Check if process was cancelled
+      const wasCancelled = response.data.results?.some(r => r.cancelled);
+
       toast({
-        title: 'Auto-Reply All Complete',
-        description: `${response.data.message} (${response.data.stats.successful} successful)`,
-        status: 'success',
+        title: wasCancelled ? 'Auto-Reply Cancelled' : 'Auto-Reply All Complete',
+        description: wasCancelled
+          ? `Process cancelled. ${response.data.stats.successful} posts were completed before cancellation.`
+          : `${response.data.message} (${response.data.stats.successful} successful)`,
+        status: wasCancelled ? 'warning' : 'success',
         duration: 5000,
         isClosable: true,
       });
@@ -188,8 +195,30 @@ function App() {
       });
     } finally {
       setLoading(false);
+      setIsAutoReplying(false);
     }
   }, [posts, toast]);
+
+  const cancelAutoReply = useCallback(async () => {
+    try {
+      await axios.post(`${API_URL}/auto-reply/cancel`);
+      toast({
+        title: 'Cancellation Requested',
+        description: 'Auto-reply process will stop after the current post completes.',
+        status: 'info',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: 'Cancel Failed',
+        description: error.response?.data?.message || 'Failed to cancel auto-reply',
+        status: 'error',
+        duration: 3000,
+        isClosable: true,
+      });
+    }
+  }, [toast]);
 
   const scheduleNextRun = useCallback(() => {
     const intervalMs = (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
@@ -577,14 +606,15 @@ function App() {
                   posts={posts}
                   onFetchPostsWithTwitterAPI={fetchPostsWithTwitterAPI}
                   onAutoReplyAll={autoReplyToAllPosts}
+                  onCancelAutoReply={cancelAutoReply}
                   loading={loading}
+                  isAutoReplying={isAutoReplying}
                   hasSettings={!!settings.googleSheetUrl}
                   scheduledState={scheduledState}
                   onStartScheduled={startScheduledAutomation}
                   onStopScheduled={stopScheduledAutomation}
                   browserStatus={browserStatus}
                   onOpenBrowser={openBrowser}
-                  onCheckBrowserStatus={checkBrowserStatus}
                 />
               </TabPanel>
             </TabPanels>
