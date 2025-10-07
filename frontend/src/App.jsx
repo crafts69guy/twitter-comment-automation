@@ -54,42 +54,22 @@ function App() {
     currentCycle: 0,
     totalProcessed: 0,
   });
+  const [browserStatus, setBrowserStatus] = useState({
+    isOpen: false,
+    activeTabs: 0,
+  });
   const toast = useToast();
 
-  useEffect(() => {
-    checkHealth();
-    loadSavedSettings();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Load scheduled automation state from localStorage
-  useEffect(() => {
-    const savedScheduledState = localStorage.getItem('scheduledAutomationState');
-    if (savedScheduledState) {
-      try {
-        const parsed = JSON.parse(savedScheduledState);
-        if (parsed.isActive && parsed.nextRunTime > new Date().getTime()) {
-          setScheduledState(parsed);
-        }
-      } catch (error) {
-        console.error('Error loading scheduled state:', error);
-      }
+  const checkBrowserStatus = useCallback(async () => {
+    try {
+      const response = await axios.get(`${API_URL}/browser/status`);
+      setBrowserStatus(response.data);
+    } catch (error) {
+      console.error('Failed to check browser status:', error);
     }
   }, []);
 
-  const loadSavedSettings = () => {
-    const savedSettings = localStorage.getItem('twitterAutomationSettings');
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        setSettings(parsedSettings);
-      } catch (error) {
-        console.error('Error loading saved settings:', error);
-      }
-    }
-  };
-
-  const checkHealth = async () => {
+  const checkHealth = useCallback(async () => {
     try {
       const response = await axios.get(`${API_URL}/health`);
       console.log('Server health:', response.data);
@@ -102,14 +82,26 @@ function App() {
         isClosable: true,
       });
     }
-  };
+  }, [toast]);
 
-  const handleSettingsUpdate = newSettings => {
+  const loadSavedSettings = useCallback(() => {
+    const savedSettings = localStorage.getItem('twitterAutomationSettings');
+    if (savedSettings) {
+      try {
+        const parsedSettings = JSON.parse(savedSettings);
+        setSettings(parsedSettings);
+      } catch (error) {
+        console.error('Error loading saved settings:', error);
+      }
+    }
+  }, []);
+
+  const handleSettingsUpdate = useCallback(newSettings => {
     setSettings(newSettings);
     localStorage.setItem('twitterAutomationSettings', JSON.stringify(newSettings));
-  };
+  }, []);
 
-  const fetchPostsWithTwitterAPI = async () => {
+  const fetchPostsWithTwitterAPI = useCallback(async () => {
     setLoading(true);
     try {
       const response = await axios.post(`${API_URL}/automation/fetch-and-generate`, {
@@ -142,9 +134,17 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [
+    settings.additionalPrompt,
+    settings.aiProvider,
+    settings.commentMaxLength,
+    settings.googleSheetUrl,
+    settings.twitterBearerToken,
+    settings.twitterCookies,
+    toast,
+  ]);
 
-  const autoReplyToAllPosts = async () => {
+  const autoReplyToAllPosts = useCallback(async () => {
     const postsWithComments = posts.filter(
       post => post.comment && post.comment.trim() !== '' && post.status !== 'replied',
     );
@@ -189,7 +189,7 @@ function App() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [posts, toast]);
 
   const scheduleNextRun = useCallback(() => {
     const intervalMs = (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
@@ -329,34 +329,7 @@ function App() {
     ],
   );
 
-  // Timer effect for scheduled automation
-  useEffect(() => {
-    let interval;
-
-    if (scheduledState.isActive && scheduledState.nextRunTime) {
-      interval = setInterval(() => {
-        const now = new Date().getTime();
-        const timeLeft = scheduledState.nextRunTime - now;
-
-        if (timeLeft <= 0) {
-          // Time to run automation
-          runScheduledAutomation();
-        } else {
-          // Update countdown
-          setScheduledState(prev => ({
-            ...prev,
-            timeRemaining: timeLeft,
-          }));
-        }
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [runScheduledAutomation, scheduledState.isActive, scheduledState.nextRunTime]);
-
-  const startScheduledAutomation = async () => {
+  const startScheduledAutomation = useCallback(async () => {
     const shouldStartImmediately = settings.scheduledAutomation.startImmediately;
     const intervalMs = (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
 
@@ -433,9 +406,15 @@ function App() {
         isClosable: true,
       });
     }
-  };
+  }, [
+    runScheduledAutomation,
+    settings.scheduledAutomation.batchSize,
+    settings.scheduledAutomation.intervalMinutes,
+    settings.scheduledAutomation.startImmediately,
+    toast,
+  ]);
 
-  const stopScheduledAutomation = () => {
+  const stopScheduledAutomation = useCallback(() => {
     setScheduledState({
       isActive: false,
       nextRunTime: null,
@@ -451,7 +430,93 @@ function App() {
       status: 'info',
       duration: 3000,
     });
-  };
+  }, [toast]);
+
+  const openBrowser = useCallback(async () => {
+    setLoading(true);
+    try {
+      const response = await axios.post(`${API_URL}/browser/open`);
+      setBrowserStatus({
+        isOpen: response.data.isOpen,
+        activeTabs: response.data.activeTabs,
+      });
+      toast({
+        title: '✅ Browser Opened',
+        description: response.data.message,
+        status: 'success',
+        duration: 3000,
+        isClosable: true,
+      });
+    } catch (error) {
+      toast({
+        title: 'Browser Open Failed',
+        description: error.response?.data?.error || 'Failed to open browser',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    checkHealth();
+    loadSavedSettings();
+    checkBrowserStatus();
+
+    // Set up interval to check browser status every 30 seconds
+    const browserStatusInterval = setInterval(() => {
+      checkBrowserStatus();
+    }, 10000);
+
+    return () => {
+      clearInterval(browserStatusInterval);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Load scheduled automation state from localStorage
+  useEffect(() => {
+    const savedScheduledState = localStorage.getItem('scheduledAutomationState');
+    if (savedScheduledState) {
+      try {
+        const parsed = JSON.parse(savedScheduledState);
+        if (parsed.isActive && parsed.nextRunTime > new Date().getTime()) {
+          setScheduledState(parsed);
+        }
+      } catch (error) {
+        console.error('Error loading scheduled state:', error);
+      }
+    }
+  }, []);
+
+  // Timer effect for scheduled automation
+  useEffect(() => {
+    let interval;
+
+    if (scheduledState.isActive && scheduledState.nextRunTime) {
+      interval = setInterval(() => {
+        const now = new Date().getTime();
+        const timeLeft = scheduledState.nextRunTime - now;
+
+        if (timeLeft <= 0) {
+          // Time to run automation
+          runScheduledAutomation();
+        } else {
+          // Update countdown
+          setScheduledState(prev => ({
+            ...prev,
+            timeRemaining: timeLeft,
+          }));
+        }
+      }, 1000);
+    }
+
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [runScheduledAutomation, scheduledState.isActive, scheduledState.nextRunTime]);
 
   return (
     <Box bg="gray.50" minH="100vh" minW="100vw">
@@ -517,6 +582,9 @@ function App() {
                   scheduledState={scheduledState}
                   onStartScheduled={startScheduledAutomation}
                   onStopScheduled={stopScheduledAutomation}
+                  browserStatus={browserStatus}
+                  onOpenBrowser={openBrowser}
+                  onCheckBrowserStatus={checkBrowserStatus}
                 />
               </TabPanel>
             </TabPanels>

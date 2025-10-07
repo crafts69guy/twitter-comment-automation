@@ -22,6 +22,7 @@ import {
   AlertDescription,
 } from '@chakra-ui/react';
 import { ExternalLinkIcon } from '@chakra-ui/icons';
+import { useEffect } from 'react';
 
 function PostsTable({
   posts,
@@ -32,6 +33,9 @@ function PostsTable({
   scheduledState,
   onStartScheduled,
   onStopScheduled,
+  browserStatus,
+  onOpenBrowser,
+  onCheckBrowserStatus,
 }) {
   const getStatusColor = status => {
     switch (status) {
@@ -58,6 +62,13 @@ function PostsTable({
         return 'Unknown';
     }
   };
+
+  // Check browser status on component mount
+  useEffect(() => {
+    if (onCheckBrowserStatus) {
+      onCheckBrowserStatus();
+    }
+  }, [onCheckBrowserStatus]);
 
   if (!hasSettings) {
     return (
@@ -125,6 +136,36 @@ function PostsTable({
                 )}
 
                 <HStack spacing={4} wrap="wrap">
+                  {/* Browser Status and Control */}
+                  {!browserStatus?.isOpen && (
+                    <Button
+                      colorScheme="purple"
+                      onClick={onOpenBrowser}
+                      isLoading={loading}
+                      loadingText="Opening Browser..."
+                      size="lg"
+                      rounded="xl"
+                      shadow="md"
+                      _hover={{ transform: 'translateY(-1px)', shadow: 'lg' }}
+                      leftIcon={<Box as="span">🌐</Box>}
+                      px={8}
+                    >
+                      Open Browser
+                    </Button>
+                  )}
+                  {browserStatus?.isOpen && (
+                    <Badge
+                      colorScheme="green"
+                      variant="solid"
+                      px={4}
+                      py={2}
+                      rounded="full"
+                      fontSize="md"
+                    >
+                      🟢 Browser Active ({browserStatus.activeTabs} tabs)
+                    </Badge>
+                  )}
+
                   <Button
                     colorScheme="teal"
                     onClick={onFetchPostsWithTwitterAPI}

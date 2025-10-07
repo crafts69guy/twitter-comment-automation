@@ -9,6 +9,7 @@ import aiRouter from "./routes/ai.js";
 import postsRouter from "./routes/posts.js";
 import autoReplyRouter from "./routes/autoReply.js";
 import automationRouter from "./routes/automation.js";
+import browserRouter from "./routes/browser.js";
 
 dotenv.config();
 
@@ -66,6 +67,7 @@ app.use("/api/ai", aiRouter);
 app.use("/api/posts", postsRouter);
 app.use("/api/auto-reply", autoReplyRouter);
 app.use("/api/automation", automationRouter);
+app.use("/api/browser", browserRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", sessionId: req.session.userId });

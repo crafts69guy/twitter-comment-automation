@@ -1,5 +1,5 @@
-import puppeteer from "puppeteer";
-import fs from "fs";
+import puppeteer from 'puppeteer';
+import fs from 'fs';
 
 class PuppeteerService {
   constructor() {
@@ -8,60 +8,88 @@ class PuppeteerService {
     this.activeTabs = new Map(); // Track active tabs by URL
   }
 
+  async getBrowserStatus() {
+    // Check if browser reference exists and is actually connected
+    let isActuallyOpen = false;
+    if (this.browser) {
+      try {
+        // Try to check if browser is still connected
+        const isConnected = this.browser.isConnected();
+        isActuallyOpen = isConnected;
+
+        // If not connected, clean up the reference
+        if (!isConnected) {
+          this.browser = null;
+          this.activeTabs.clear();
+        }
+      } catch (error) {
+        // If any error occurs, assume browser is closed
+        this.browser = null;
+        this.activeTabs.clear();
+        isActuallyOpen = false;
+      }
+    }
+
+    return {
+      isOpen: isActuallyOpen,
+      activeTabs: this.activeTabs.size,
+    };
+  }
+
   async initialize() {
     if (!this.browser) {
       // Configuration for browser launch
       let launchOptions = {
-        headless: true,
+        headless: false,
         args: [
-          "--no-sandbox",
-          "--disable-setuid-sandbox",
-          "--disable-dev-shm-usage",
-          "--disable-accelerated-2d-canvas",
-          "--no-first-run",
-          "--no-zygote",
-          "--disable-gpu",
-          "--disable-blink-features=AutomationControlled",
-          "--window-size=1920,1080",
-          "--disable-web-security",
-          "--disable-features=IsolateOrigins,site-per-process",
-          "--allow-running-insecure-content",
-          "--no-default-browser-check",
-          "--disable-infobars",
-          "--exclude-switches=enable-automation",
-          "--enable-features=NetworkService,NetworkServiceInProcess",
-          "--disable-background-timer-throttling",
-          "--disable-backgrounding-occluded-windows",
-          "--disable-renderer-backgrounding",
-          "--disable-features=TranslateUI"
-        ]
+          '--no-sandbox',
+          '--disable-setuid-sandbox',
+          '--disable-dev-shm-usage',
+          '--disable-accelerated-2d-canvas',
+          '--no-first-run',
+          '--no-zygote',
+          '--disable-gpu',
+          '--disable-blink-features=AutomationControlled',
+          '--window-size=1920,1080',
+          '--disable-web-security',
+          '--disable-features=IsolateOrigins,site-per-process',
+          '--allow-running-insecure-content',
+          '--no-default-browser-check',
+          '--disable-infobars',
+          '--exclude-switches=enable-automation',
+          '--enable-features=NetworkService,NetworkServiceInProcess',
+          '--disable-background-timer-throttling',
+          '--disable-backgrounding-occluded-windows',
+          '--disable-renderer-backgrounding',
+          '--disable-features=TranslateUI',
+        ],
       };
 
       // Check if running in Docker (Alpine Linux with Chromium)
       if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        console.log("Using Docker Chromium from env:", process.env.PUPPETEER_EXECUTABLE_PATH);
+        console.log('Using Docker Chromium from env:', process.env.PUPPETEER_EXECUTABLE_PATH);
         launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
       } else if (fs.existsSync('/usr/bin/chromium-browser')) {
         // Alpine Linux Chromium
-        console.log("Using Alpine Chromium: /usr/bin/chromium-browser");
+        console.log('Using Alpine Chromium: /usr/bin/chromium-browser');
         launchOptions.executablePath = '/usr/bin/chromium-browser';
-      } else if (process.platform === "darwin") {
+      } else if (process.platform === 'darwin') {
         // macOS
-        const chromePath = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
+        const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
         if (fs.existsSync(chromePath)) {
-          console.log("Using macOS Chrome:", chromePath);
+          console.log('Using macOS Chrome:', chromePath);
           launchOptions.executablePath = chromePath;
         }
-      } else if (process.platform === "win32") {
+      } else if (process.platform === 'win32') {
         // Windows
         const windowsPaths = [
-          "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-          "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe"
+          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
         ];
 
         for (const path of windowsPaths) {
           if (fs.existsSync(path)) {
-            console.log("Using Windows Chrome:", path);
+            console.log('Using Windows Chrome:', path);
             launchOptions.executablePath = path;
             break;
           }
@@ -69,15 +97,15 @@ class PuppeteerService {
       } else {
         // Linux
         const linuxPaths = [
-          "/usr/bin/google-chrome",
-          "/usr/bin/google-chrome-stable",
-          "/usr/bin/chromium-browser",
-          "/usr/bin/chromium"
+          '/usr/bin/google-chrome',
+          '/usr/bin/google-chrome-stable',
+          '/usr/bin/chromium-browser',
+          '/usr/bin/chromium',
         ];
 
         for (const path of linuxPaths) {
           if (fs.existsSync(path)) {
-            console.log("Using Linux Chrome/Chromium:", path);
+            console.log('Using Linux Chrome/Chromium:', path);
             launchOptions.executablePath = path;
             break;
           }
@@ -90,7 +118,7 @@ class PuppeteerService {
       }
 
       this.browser = await puppeteer.launch(launchOptions);
-      console.log("Browser opened successfully");
+      console.log('Browser opened successfully');
     }
     return this.browser;
   }
@@ -99,7 +127,7 @@ class PuppeteerService {
     await this.initialize();
 
     // Check if we already have a tab for this URL or similar
-    const baseUrl = url.split("?")[0]; // Remove query parameters for comparison
+    const baseUrl = url.split('?')[0]; // Remove query parameters for comparison
 
     if (this.activeTabs.has(baseUrl)) {
       const existingPage = this.activeTabs.get(baseUrl);
@@ -119,7 +147,7 @@ class PuppeteerService {
 
     // Set user agent to avoid detection
     await page.setUserAgent(
-      "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
     );
 
     // Set viewport to desktop size
@@ -137,18 +165,18 @@ class PuppeteerService {
 
       // Navigate to the URL with longer timeout
       await page.goto(url, {
-        waitUntil: "networkidle2",
+        waitUntil: 'networkidle2',
         timeout: 60000,
       });
 
       // Wait longer for React app to fully render
-      await new Promise((resolve) => setTimeout(resolve, 8000));
+      await new Promise(resolve => setTimeout(resolve, 8000));
 
       // Enhanced selectors for Twitter/X
       const selectors = {
         // Main tweet selectors
         article: 'article[data-testid="tweet"]',
-        articleFallback: "article",
+        articleFallback: 'article',
         tweetText: '[data-testid="tweetText"]',
 
         // Alternative text selectors
@@ -157,7 +185,7 @@ class PuppeteerService {
 
         // User selectors
         userName: '[data-testid="User-Name"]',
-        userNameAlt: "div[dir=auto] span",
+        userNameAlt: 'div[dir=auto] span',
 
         // Metrics
         likeButton: '[data-testid="like"]',
@@ -175,15 +203,15 @@ class PuppeteerService {
       });
 
       // Extract tweet content with enhanced logic
-      const tweetData = await page.evaluate((sels) => {
+      const tweetData = await page.evaluate(sels => {
         // Helper function to get text content
-        const getText = (selector) => {
+        const getText = selector => {
           const element = document.querySelector(selector);
-          return element ? element.innerText || element.textContent : "";
+          return element ? element.innerText || element.textContent : '';
         };
 
         // Get tweet text - try multiple methods
-        let tweetText = "";
+        let tweetText = '';
 
         // Method 1: Direct tweet text selector
         tweetText = getText(sels.tweetText);
@@ -193,8 +221,8 @@ class PuppeteerService {
           const spans = document.querySelectorAll(sels.tweetTextSpan);
           if (spans.length > 0) {
             tweetText = Array.from(spans)
-              .map((span) => span.textContent)
-              .join("");
+              .map(span => span.textContent)
+              .join('');
           }
         }
 
@@ -213,12 +241,12 @@ class PuppeteerService {
 
         // Method 4: Fallback - look for any text content in articles
         if (!tweetText) {
-          const articles = document.querySelectorAll("article");
+          const articles = document.querySelectorAll('article');
           for (const article of articles) {
-            const spans = article.querySelectorAll("span[dir=auto]");
+            const spans = article.querySelectorAll('span[dir=auto]');
             for (const span of spans) {
               const text = span.innerText || span.textContent;
-              if (text && text.length > 10 && !text.includes("@")) {
+              if (text && text.length > 10 && !text.includes('@')) {
                 tweetText = text;
                 break;
               }
@@ -228,28 +256,28 @@ class PuppeteerService {
         }
 
         // Get author information
-        let authorName = "";
-        let authorHandle = "";
+        let authorName = '';
+        let authorHandle = '';
 
         const userNameElement = document.querySelector(sels.userName);
         if (userNameElement) {
           const text = userNameElement.innerText || userNameElement.textContent;
-          const lines = text.split("\n");
-          authorName = lines[0] || "";
+          const lines = text.split('\n');
+          authorName = lines[0] || '';
 
           // Extract handle
           const handleMatch = text.match(/@[\w]+/);
-          authorHandle = handleMatch ? handleMatch[0] : "";
+          authorHandle = handleMatch ? handleMatch[0] : '';
         } else {
           // Fallback: look for user info in page
           const links = document.querySelectorAll('a[href*="/"]');
           for (const link of links) {
-            const href = link.getAttribute("href");
-            if (href && href.match(/^\/[\w]+$/) && !href.includes("/home")) {
+            const href = link.getAttribute('href');
+            if (href && href.match(/^\/[\w]+$/) && !href.includes('/home')) {
               const text = link.innerText || link.textContent;
-              if (text && !text.includes("@")) {
+              if (text && !text.includes('@')) {
                 authorName = text;
-                authorHandle = "@" + href.substring(1);
+                authorHandle = '@' + href.substring(1);
                 break;
               }
             }
@@ -257,28 +285,28 @@ class PuppeteerService {
         }
 
         // Get metrics with better extraction
-        const getMetric = (selector) => {
+        const getMetric = selector => {
           const element = document.querySelector(selector);
           if (element) {
-            const ariaLabel = element.getAttribute("aria-label");
+            const ariaLabel = element.getAttribute('aria-label');
             if (ariaLabel) {
               const match = ariaLabel.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/);
-              return match ? match[1] : "0";
+              return match ? match[1] : '0';
             }
             // Fallback: look for text in button
             const text = element.innerText || element.textContent;
             if (text) {
               const match = text.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/);
-              return match ? match[1] : "0";
+              return match ? match[1] : '0';
             }
           }
-          return "0";
+          return '0';
         };
 
         return {
-          content: tweetText || "Could not extract tweet content",
-          author: authorName || "Unknown",
-          handle: authorHandle || "@unknown",
+          content: tweetText || 'Could not extract tweet content',
+          author: authorName || 'Unknown',
+          handle: authorHandle || '@unknown',
           likes: getMetric(sels.likeButton),
           retweets: getMetric(sels.retweetButton),
           replies: getMetric(sels.replyButton),
@@ -300,12 +328,12 @@ class PuppeteerService {
       console.error(`Error scraping ${url}:`, error.message);
       return {
         error: error.message,
-        content: "",
-        author: "",
-        handle: "",
-        likes: "0",
-        retweets: "0",
-        replies: "0",
+        content: '',
+        author: '',
+        handle: '',
+        likes: '0',
+        retweets: '0',
+        replies: '0',
       };
     }
   }
@@ -322,21 +350,21 @@ class PuppeteerService {
       const batch = urls.slice(i, i + tabLimit);
 
       // Create pages for parallel processing
-      const pagePromises = batch.map(async (url) => {
+      const pagePromises = batch.map(async url => {
         let page = null;
         try {
           page = await this.browser.newPage();
 
           // Set user agent to avoid detection
           await page.setUserAgent(
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
           );
 
           // Only block heavy resources, keep CSS for proper rendering
           await page.setRequestInterception(true);
-          page.on("request", (request) => {
+          page.on('request', request => {
             const resourceType = request.resourceType();
-            if (["image", "font", "media"].includes(resourceType)) {
+            if (['image', 'font', 'media'].includes(resourceType)) {
               request.abort();
             } else {
               request.continue();
@@ -361,7 +389,7 @@ class PuppeteerService {
             try {
               await page.close();
             } catch (closeError) {
-              console.error("Error closing page:", closeError.message);
+              console.error('Error closing page:', closeError.message);
             }
           }
         }
@@ -373,7 +401,7 @@ class PuppeteerService {
 
       // Add delay between batches to avoid rate limiting
       if (i + tabLimit < urls.length) {
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
@@ -389,10 +417,10 @@ class PuppeteerService {
       const currentUrl = await page.evaluate(() => window.location.href);
 
       // Only navigate if we're not already on the right page
-      if (!currentUrl.includes(url.split("/").pop())) {
+      if (!currentUrl.includes(url.split('/').pop())) {
         console.log(`Navigating to: ${url}`);
         await page.goto(url, {
-          waitUntil: "networkidle2",
+          waitUntil: 'networkidle2',
           timeout: 30000,
         });
         isNewTab = true;
@@ -401,7 +429,7 @@ class PuppeteerService {
       }
 
       // Wait for page to load
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // Try to like the post first
       try {
@@ -413,29 +441,27 @@ class PuppeteerService {
           const unlikeButton = await firstCell.$('[data-testid="unlike"]');
 
           if (unlikeButton) {
-            console.log("Post already liked, skipping");
+            console.log('Post already liked, skipping');
           } else {
             // Post not liked yet, find and click like button
             const likeButton = await firstCell.$('[data-testid="like"]');
             if (likeButton) {
               await likeButton.click();
-              console.log("Post liked successfully");
-              await new Promise((resolve) => setTimeout(resolve, 1000));
+              console.log('Post liked successfully');
+              await new Promise(resolve => setTimeout(resolve, 1000));
             } else {
-              console.log("Like button not found, continuing with reply");
+              console.log('Like button not found, continuing with reply');
             }
           }
         } else {
-          console.log("Post cell not found, continuing with reply");
+          console.log('Post cell not found, continuing with reply');
         }
       } catch (error) {
         console.log(`Failed to like post: ${error.message}, continuing with reply`);
       }
 
       // Try to find and click the reply button
-      const replySelectors = [
-        '[data-testid="tweetTextarea_0"][role="textbox"]',
-      ];
+      const replySelectors = ['[data-testid="tweetTextarea_0"][role="textbox"]'];
 
       let replyClicked = false;
       for (const selector of replySelectors) {
@@ -452,15 +478,15 @@ class PuppeteerService {
       }
 
       if (!replyClicked) {
-        throw new Error("Could not find reply button");
+        throw new Error('Could not find reply button');
       }
 
       // Wait longer for the reply modal to fully load
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       try {
         // await element.click();
-        await new Promise((resolve) => setTimeout(resolve, 500));
+        await new Promise(resolve => setTimeout(resolve, 500));
 
         // Type the comment character by character
         for (const char of comment) {
@@ -486,16 +512,12 @@ class PuppeteerService {
           if (button) {
             const isDisabled = await page.$eval(
               buttonSelector,
-              (el) =>
-                el.hasAttribute("disabled") ||
-                el.getAttribute("aria-disabled") === "true",
+              el => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
             );
 
             if (!isDisabled) {
               buttonEnabled = true;
-              console.log(
-                `Reply button is now enabled using selector: ${buttonSelector}`,
-              );
+              console.log(`Reply button is now enabled using selector: ${buttonSelector}`);
               break;
             } else {
               console.log(`Button found but still disabled: ${buttonSelector}`);
@@ -506,7 +528,7 @@ class PuppeteerService {
         } catch (e) {
           console.log(`Error checking button: ${e.message}`);
         }
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise(resolve => setTimeout(resolve, 1000));
       }
 
       if (buttonEnabled) {
@@ -518,44 +540,36 @@ class PuppeteerService {
               const isActuallyDisabled = await page
                 .$eval(
                   selector,
-                  (el) =>
-                    el.hasAttribute("disabled") ||
-                    el.getAttribute("aria-disabled") === "true",
+                  el => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
                 )
                 .catch(() => true); // If eval fails, assume disabled
 
               if (!isActuallyDisabled) {
                 await button.click();
                 submitClicked = true;
-                console.log(
-                  `Submit button clicked using selector: ${selector}`,
-                );
+                console.log(`Submit button clicked using selector: ${selector}`);
                 break;
               } else {
                 console.log(`Button found but disabled, skipping: ${selector}`);
               }
             }
           } catch (error) {
-            console.log(
-              `Failed to click submit with selector ${selector}: ${error.message}`,
-            );
+            console.log(`Failed to click submit with selector ${selector}: ${error.message}`);
             continue;
           }
         }
       }
 
       if (!submitClicked) {
-        console.log(
-          "Submit button not found or disabled, reply may still be successful",
-        );
+        console.log('Submit button not found or disabled, reply may still be successful');
       }
 
       // Wait to see if reply was successful
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       return {
         success: true,
-        message: "Reply posted successfully",
+        message: 'Reply posted successfully',
       };
     } catch (error) {
       console.error(`Error auto-replying to ${url}:`, error.message);
@@ -566,7 +580,7 @@ class PuppeteerService {
     } finally {
       // Don't close the tab - keep it open for reuse
       // The tab will be managed by the activeTabs Map
-      console.log("Keeping tab open for future reuse");
+      console.log('Keeping tab open for future reuse');
     }
   }
 
@@ -574,12 +588,12 @@ class PuppeteerService {
     const results = [];
 
     for (const post of posts) {
-      if (!post.comment || post.comment.trim() === "") {
+      if (!post.comment || post.comment.trim() === '') {
         results.push({
           postId: post.id,
           url: post.url,
           success: false,
-          error: "No comment available",
+          error: 'No comment available',
         });
         continue;
       }
@@ -595,14 +609,14 @@ class PuppeteerService {
       });
 
       // Add delay between replies to avoid rate limiting
-      await new Promise((resolve) => setTimeout(resolve, 5000));
+      await new Promise(resolve => setTimeout(resolve, 5000));
     }
 
     return results;
   }
 
   async closeAllTabs() {
-    console.log("Closing all active tabs...");
+    console.log('Closing all active tabs...');
     for (const [url, page] of this.activeTabs) {
       try {
         await page.close();
@@ -627,12 +641,12 @@ class PuppeteerService {
 const puppeteerService = new PuppeteerService();
 
 // Cleanup on process termination
-process.on("SIGINT", async () => {
+process.on('SIGINT', async () => {
   await puppeteerService.close();
   process.exit(0);
 });
 
-process.on("SIGTERM", async () => {
+process.on('SIGTERM', async () => {
   await puppeteerService.close();
   process.exit(0);
 });
