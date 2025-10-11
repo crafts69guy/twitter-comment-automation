@@ -22,7 +22,6 @@ import {
   AlertDescription,
 } from '@chakra-ui/react';
 import { ExternalLinkIcon } from '@chakra-ui/icons';
-import { useEffect } from 'react';
 
 function PostsTable({
   posts,
@@ -63,13 +62,6 @@ function PostsTable({
         return 'Unknown';
     }
   };
-
-  // Check browser status on component mount
-  useEffect(() => {
-    if (onCheckBrowserStatus) {
-      onCheckBrowserStatus();
-    }
-  }, [onCheckBrowserStatus]);
 
   if (!hasSettings) {
     return (
