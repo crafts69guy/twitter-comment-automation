@@ -478,9 +478,12 @@ class PuppeteerService {
             // Post not liked yet, find and click like button
             const likeButton = await firstCell.$('[data-testid="like"]');
             if (likeButton) {
+              await new Promise(resolve => setTimeout(resolve, 2500));
+
               await likeButton.click();
               console.log('Post liked successfully');
-              await new Promise(resolve => setTimeout(resolve, 1000));
+
+              await new Promise(resolve => setTimeout(resolve, 5000));
             } else {
               console.log('Like button not found, continuing with reply');
             }
