@@ -580,6 +580,7 @@ class PuppeteerService {
                 .catch(() => true); // If eval fails, assume disabled
 
               if (!isActuallyDisabled) {
+                await new Promise(resolve => setTimeout(resolve, 3000));
                 await button.click();
                 submitClicked = true;
                 console.log(`Submit button clicked using selector: ${selector}`);
