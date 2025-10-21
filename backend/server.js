@@ -11,6 +11,12 @@ import autoReplyRouter from "./routes/autoReply.js";
 import automationRouter from "./routes/automation.js";
 import browserRouter from "./routes/browser.js";
 
+// V2 Routes (new workflow)
+import automationV2Router from "./routes/automationV2.js";
+import batchesRouter from "./routes/batches.js";
+import failedLinksRouter from "./routes/failedLinks.js";
+import browserV2Router from "./routes/browserV2.js";
+
 dotenv.config();
 
 const app = express();
@@ -40,27 +46,110 @@ app.use(
   })
 );
 
+// Session storage with new V2 structure
 const sessions = {};
+
+// SSE clients storage
+const sseClients = new Map();
+
+// Initialize or get session with V2 structure
+const initializeSession = (userId) => {
+  if (!sessions[userId]) {
+    sessions[userId] = {
+      // Source Data
+      allLinks: [],
+
+      // Batch Management
+      batches: [],
+
+      // Current State
+      currentBatch: null,
+
+      // Failed Links Archive
+      failedLinks: [],
+
+      // Automation Settings
+      automation: {
+        isActive: false,
+        isPaused: false,
+        nextBatchTime: null,
+        intervalMinutes: 20,
+        batchSize: 15,
+        totalBatchesCompleted: 0,
+        totalLinksProcessed: 0,
+        totalSuccessful: 0,
+        totalFailed: 0
+      },
+
+      // Settings
+      settings: {
+        googleSheetUrl: "",
+        aiProvider: "gemini",
+        apiKey: "",
+        batchSize: 15,
+        batchIntervalMinutes: 20,
+        additionalPrompt: "",
+        twitterCookies: "",
+        twitterBearerToken: ""
+      },
+
+      // Browser Management
+      browser: {
+        isOpen: false,
+        currentPageUrl: null,
+        lastActivityAt: null
+      }
+    };
+  }
+  return sessions[userId];
+};
 
 app.use((req, res, next) => {
   if (!req.session.userId) {
     req.session.userId = uuidv4();
   }
 
-  if (!sessions[req.session.userId]) {
-    sessions[req.session.userId] = {
-      posts: [],
-      settings: {
-        googleSheetUrl: "",
-        aiProvider: "openai",
-        apiKey: "",
-      },
-    };
-  }
-  req.userSession = sessions[req.session.userId];
+  req.userSession = initializeSession(req.session.userId);
+  req.userId = req.session.userId;
   next();
 });
 
+// SSE endpoint for real-time updates
+app.get("/api/events/stream", (req, res) => {
+  const userId = req.userId;
+
+  // Set SSE headers
+  res.setHeader("Content-Type", "text/event-stream");
+  res.setHeader("Cache-Control", "no-cache");
+  res.setHeader("Connection", "keep-alive");
+  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+
+  // Send initial connection event
+  res.write(`data: ${JSON.stringify({ type: "connected", userId })}\n\n`);
+
+  // Store client connection
+  sseClients.set(userId, res);
+
+  // Handle client disconnect
+  req.on("close", () => {
+    sseClients.delete(userId);
+  });
+});
+
+// Helper function to emit SSE events
+export const emitSSE = (userId, eventType, data) => {
+  const client = sseClients.get(userId);
+  if (client) {
+    client.write(`event: ${eventType}\n`);
+    client.write(`data: ${JSON.stringify(data)}\n\n`);
+  }
+};
+
+// Make sessions and SSE available to routes
+app.set("sessions", sessions);
+app.set("emitSSE", emitSSE);
+
+// Legacy routes (V1)
 app.use("/api/google-sheets", googleSheetsRouter);
 app.use("/api/scraper", scraperRouter);
 app.use("/api/ai", aiRouter);
@@ -68,6 +157,12 @@ app.use("/api/posts", postsRouter);
 app.use("/api/auto-reply", autoReplyRouter);
 app.use("/api/automation", automationRouter);
 app.use("/api/browser", browserRouter);
+
+// V2 routes (new workflow)
+app.use("/api/v2/automation", automationV2Router);
+app.use("/api/v2/batches", batchesRouter);
+app.use("/api/v2/failed-links", failedLinksRouter);
+app.use("/api/v2/browser", browserV2Router);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", sessionId: req.session.userId });

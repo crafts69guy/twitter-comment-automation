@@ -1,0 +1,604 @@
+import { useState, useEffect } from 'react';
+import {
+  ChakraProvider,
+  Box,
+  Tabs,
+  TabList,
+  TabPanels,
+  Tab,
+  TabPanel,
+  Container,
+  Heading,
+  Badge,
+  useToast,
+} from '@chakra-ui/react';
+import axios from 'axios';
+import useSSE from './hooks/useSSE';
+
+// Import tab components
+import SettingsTab from './components/tabs/SettingsTab';
+import CurrentBatchTab from './components/tabs/CurrentBatchTab';
+import FailedLinksTab from './components/tabs/FailedLinksTab';
+import OverallStatsTab from './components/tabs/OverallStatsTab';
+
+// Determine API URL based on environment
+const API_URL =
+  window.location.hostname === 'localhost' &&
+  window.location.port !== '80' &&
+  window.location.port !== ''
+    ? 'http://localhost:3001'
+    : '';
+
+const API_BASE = `${API_URL}/api/v2`;
+const SSE_URL = `${API_URL}/api/events/stream`;
+
+function AppV2() {
+  const toast = useToast();
+
+  // State management
+  const [settings, setSettings] = useState({
+    googleSheetUrl:
+      'https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing',
+    aiProvider: 'gemini',
+    apiKey: '',
+    batchSize: 15,
+    batchIntervalMinutes: 20,
+    additionalPrompt: '',
+    twitterCookies: '',
+    twitterBearerToken: '',
+  });
+
+  const [automationStatus, setAutomationStatus] = useState({
+    isActive: false,
+    isPaused: false,
+    currentBatch: null,
+    nextBatchTime: null,
+    stats: {
+      totalBatchesCompleted: 0,
+      totalLinksProcessed: 0,
+      totalSuccessful: 0,
+      totalFailed: 0,
+      totalBatches: 0,
+      pendingBatches: 0,
+    },
+  });
+
+  const [currentBatchDetails, setCurrentBatchDetails] = useState(null);
+  const [failedLinks, setFailedLinks] = useState([]);
+  const [browserStatus, setBrowserStatus] = useState({
+    isOpen: false,
+    currentUrl: null,
+  });
+
+  const [countdown, setCountdown] = useState({
+    remainingMs: 0,
+    nextBatchTime: null,
+  });
+
+  // SSE Event handlers
+  const sseEventHandlers = {
+    'automation:started': data => {
+      console.log('Automation started:', data);
+      toast({
+        title: 'Automation Started',
+        description: `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
+        status: 'success',
+        duration: 3000,
+      });
+      fetchAutomationStatus();
+    },
+
+    'batch:started': data => {
+      console.log('Batch started:', data);
+      toast({
+        title: `Batch ${data.batch.batchNumber} Started`,
+        description: `Processing ${data.batch.totalLinks} links`,
+        status: 'info',
+        duration: 2000,
+      });
+      fetchCurrentBatch();
+    },
+
+    'link:processing': data => {
+      console.log('Processing link:', data);
+      setCurrentBatchDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentLinkIndex: data.currentIndex,
+          progress: data.percentage,
+          currentLink: data.currentLink,
+        };
+      });
+    },
+
+    'link:success': data => {
+      console.log('Link success:', data);
+      fetchCurrentBatch();
+    },
+
+    'link:failed': data => {
+      console.log('Link failed:', data);
+      fetchCurrentBatch();
+      fetchFailedLinks();
+    },
+
+    'batch:completed': data => {
+      console.log('Batch completed:', data);
+      toast({
+        title: `Batch ${data.batch.batchNumber} Completed`,
+        description: `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
+        status: data.batch.failedCount > 0 ? 'warning' : 'success',
+        duration: 3000,
+      });
+      setCurrentBatchDetails(null);
+      fetchAutomationStatus();
+      fetchFailedLinks();
+    },
+
+    'batch:scheduled': data => {
+      console.log('Batch scheduled:', data);
+      setCountdown({
+        nextBatchTime: new Date(data.nextBatchTime),
+        remainingMs: new Date(data.nextBatchTime) - Date.now(),
+      });
+    },
+
+    'countdown:update': data => {
+      setCountdown({
+        nextBatchTime: new Date(data.nextBatchTime),
+        remainingMs: data.remainingMs,
+      });
+    },
+
+    'automation:paused': data => {
+      console.log('Automation paused:', data);
+      toast({
+        title: 'Automation Paused',
+        status: 'info',
+        duration: 2000,
+      });
+      fetchAutomationStatus();
+    },
+
+    'automation:resumed': data => {
+      console.log('Automation resumed:', data);
+      toast({
+        title: 'Automation Resumed',
+        status: 'success',
+        duration: 2000,
+      });
+      fetchAutomationStatus();
+    },
+
+    'automation:stopped': data => {
+      console.log('Automation stopped:', data);
+      toast({
+        title: 'Automation Stopped',
+        status: 'warning',
+        duration: 2000,
+      });
+      setAutomationStatus(prev => ({
+        ...prev,
+        isActive: false,
+        isPaused: false,
+        currentBatch: null,
+      }));
+      setCurrentBatchDetails(null);
+    },
+
+    'automation:completed': data => {
+      console.log('Automation completed:', data);
+      toast({
+        title: 'Automation Completed',
+        description: `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
+        status: 'success',
+        duration: 5000,
+      });
+      fetchAutomationStatus();
+    },
+
+    'batch:skipped': data => {
+      console.log('Batch skipped:', data);
+      toast({
+        title: 'Batch Skipped',
+        description: `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
+        status: 'warning',
+        duration: 3000,
+      });
+    },
+
+    'sheets:synced': data => {
+      console.log('Sheets synced:', data);
+      toast({
+        title: 'Google Sheets Synced',
+        description: `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+        status: 'success',
+        duration: 3000,
+      });
+    },
+
+    'comments:generated': data => {
+      console.log('Comments generated:', data);
+      toast({
+        title: 'Comments Generated',
+        description: `Generated ${data.count} AI comments`,
+        status: 'success',
+        duration: 2000,
+      });
+    },
+  };
+
+  // Initialize SSE connection
+  const { isConnected, reconnect } = useSSE(SSE_URL, sseEventHandlers, true);
+
+  // API functions
+  const fetchAutomationStatus = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/automation/status`, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setAutomationStatus(response.data);
+      }
+    } catch (error) {
+      console.error('Error fetching automation status:', error);
+    }
+  };
+
+  const fetchCurrentBatch = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/batches/current`, {
+        withCredentials: true,
+      });
+      if (response.data.success && response.data.currentBatch) {
+        setCurrentBatchDetails(response.data.currentBatch);
+      }
+    } catch (error) {
+      console.error('Error fetching current batch:', error);
+    }
+  };
+
+  const fetchFailedLinks = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/failed-links`, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setFailedLinks(response.data.failedLinks);
+      }
+    } catch (error) {
+      console.error('Error fetching failed links:', error);
+    }
+  };
+
+  const fetchBrowserStatus = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/browser/status`, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setBrowserStatus({
+          isOpen: response.data.isOpen,
+          currentUrl: response.data.currentUrl,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching browser status:', error);
+    }
+  };
+
+  const startAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/start`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Starting',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error starting automation:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to start automation',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const stopAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/stop`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Stopped',
+          status: 'warning',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error stopping automation:', error);
+    }
+  };
+
+  const pauseAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/pause`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Paused',
+          status: 'info',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error pausing automation:', error);
+    }
+  };
+
+  const resumeAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/resume`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Resumed',
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error resuming automation:', error);
+    }
+  };
+
+  const forceNextBatch = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/force-next`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Forced Next Batch',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error forcing next batch:', error);
+    }
+  };
+
+  const syncGoogleSheets = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/sync-sheets`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Sheets Synced',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error syncing sheets:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to sync sheets',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const updateSettings = async newSettings => {
+    try {
+      const response = await axios.post(`${API_BASE}/automation/update-settings`, newSettings, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setSettings(response.data.settings);
+        toast({
+          title: 'Settings Updated',
+          status: 'success',
+          duration: 1000,
+        });
+      }
+    } catch (error) {
+      console.error('Error updating settings:', error);
+    }
+  };
+
+  const openBrowser = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/browser/open`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        setBrowserStatus({ isOpen: true, currentUrl: null });
+        toast({
+          title: 'Browser Opened',
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error opening browser:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open browser',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const closeBrowser = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/browser/close`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        setBrowserStatus({ isOpen: false, currentUrl: null });
+        toast({
+          title: 'Browser Closed',
+          status: 'info',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error closing browser:', error);
+    }
+  };
+
+  // Initialize on mount
+  useEffect(() => {
+    fetchAutomationStatus();
+    fetchFailedLinks();
+    fetchBrowserStatus();
+
+    // Poll browser status every 10 seconds
+    const interval = setInterval(() => {
+      fetchBrowserStatus();
+    }, 10000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  return (
+    <ChakraProvider>
+      <Box minH="100vh" minW="100vw" bg="gray.50" py={8}>
+        <Container maxW="container.xl">
+          {/* Header */}
+          <Box mb={8} textAlign="center">
+            <Heading size="xl" mb={2}>
+              Twitter Comment Automation V2
+            </Heading>
+            <Box>
+              <Badge colorScheme={isConnected ? 'green' : 'red'} mr={2}>
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </Badge>
+              <Badge colorScheme={automationStatus.isActive ? 'blue' : 'gray'}>
+                {automationStatus.isActive
+                  ? automationStatus.isPaused
+                    ? 'Paused'
+                    : 'Active'
+                  : 'Inactive'}
+              </Badge>
+            </Box>
+          </Box>
+
+          {/* Tabs */}
+          <Tabs variant="enclosed" colorScheme="blue">
+            <TabList>
+              <Tab>Settings</Tab>
+              <Tab>
+                Current Batch
+                {currentBatchDetails && (
+                  <Badge ml={2} colorScheme="blue">
+                    Processing
+                  </Badge>
+                )}
+              </Tab>
+              <Tab>
+                Failed Links
+                {failedLinks.length > 0 && (
+                  <Badge ml={2} colorScheme="red">
+                    {failedLinks.length}
+                  </Badge>
+                )}
+              </Tab>
+              <Tab>Overall Stats</Tab>
+            </TabList>
+
+            <TabPanels>
+              {/* Settings Tab */}
+              <TabPanel>
+                <SettingsTab
+                  settings={settings}
+                  onUpdateSettings={updateSettings}
+                  onSyncSheets={syncGoogleSheets}
+                />
+              </TabPanel>
+
+              {/* Current Batch Tab */}
+              <TabPanel>
+                <CurrentBatchTab
+                  automationStatus={automationStatus}
+                  currentBatchDetails={currentBatchDetails}
+                  browserStatus={browserStatus}
+                  countdown={countdown}
+                  onStart={startAutomation}
+                  onStop={stopAutomation}
+                  onPause={pauseAutomation}
+                  onResume={resumeAutomation}
+                  onForceNext={forceNextBatch}
+                  onOpenBrowser={openBrowser}
+                  onCloseBrowser={closeBrowser}
+                />
+              </TabPanel>
+
+              {/* Failed Links Tab */}
+              <TabPanel>
+                <FailedLinksTab failedLinks={failedLinks} onRefresh={fetchFailedLinks} />
+              </TabPanel>
+
+              {/* Overall Stats Tab */}
+              <TabPanel>
+                <OverallStatsTab stats={automationStatus.stats} />
+              </TabPanel>
+            </TabPanels>
+          </Tabs>
+        </Container>
+      </Box>
+    </ChakraProvider>
+  );
+}
+
+export default AppV2;
