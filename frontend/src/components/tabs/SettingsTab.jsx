@@ -17,13 +17,11 @@ import {
   Text,
   Divider,
   Badge,
-  useToast,
 } from '@chakra-ui/react';
 
 function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const toast = useToast();
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -164,16 +162,9 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
                 <option value="openai">OpenAI (GPT-4)</option>
                 <option value="anthropic">Anthropic (Claude)</option>
               </Select>
-            </FormControl>
-
-            <FormControl>
-              <FormLabel>API Key</FormLabel>
-              <Input
-                type="password"
-                value={localSettings.apiKey}
-                onChange={e => handleChange('apiKey', e.target.value)}
-                placeholder={`Enter your ${localSettings.aiProvider} API key`}
-              />
+              <Text fontSize="sm" color="gray.500" mt={1}>
+                API keys are configured in backend .env file
+              </Text>
             </FormControl>
 
             <FormControl>

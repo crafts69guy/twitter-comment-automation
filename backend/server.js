@@ -85,7 +85,6 @@ const initializeSession = (userId) => {
       settings: {
         googleSheetUrl: "",
         aiProvider: "gemini",
-        apiKey: "",
         batchSize: 15,
         batchIntervalMinutes: 20,
         additionalPrompt: "",

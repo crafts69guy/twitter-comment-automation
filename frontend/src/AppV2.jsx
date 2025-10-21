@@ -37,10 +37,8 @@ function AppV2() {
 
   // State management
   const [settings, setSettings] = useState({
-    googleSheetUrl:
-      'https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing',
+    googleSheetUrl: '',
     aiProvider: 'gemini',
-    apiKey: '',
     batchSize: 15,
     batchIntervalMinutes: 20,
     additionalPrompt: '',
@@ -183,8 +181,13 @@ function AppV2() {
         isActive: false,
         isPaused: false,
         currentBatch: null,
+        nextBatchTime: null,
       }));
       setCurrentBatchDetails(null);
+      setCountdown({
+        remainingMs: 0,
+        nextBatchTime: null,
+      });
     },
 
     'automation:completed': data => {

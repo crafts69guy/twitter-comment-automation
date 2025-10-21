@@ -140,10 +140,28 @@ class AutomationController {
       `[AutomationController] Generating comments for ${linksWithoutComments.length} links...`,
     );
 
-    const { aiProvider, apiKey, additionalPrompt } = this.session.settings;
+    const { aiProvider, additionalPrompt } = this.session.settings;
+
+    // Get API key from environment based on provider
+    let apiKey;
+    switch (aiProvider) {
+      case 'gemini':
+        apiKey = process.env.GEMINI_API_KEY;
+        break;
+      case 'openai':
+        apiKey = process.env.OPENAI_API_KEY;
+        break;
+      case 'anthropic':
+        apiKey = process.env.ANTHROPIC_API_KEY;
+        break;
+      default:
+        throw new Error(`Unknown AI provider: ${aiProvider}`);
+    }
 
     if (!apiKey) {
-      throw new Error(`API key not configured for ${aiProvider}`);
+      throw new Error(
+        `API key not configured in .env for ${aiProvider}. Please add ${aiProvider.toUpperCase()}_API_KEY to your .env file`,
+      );
     }
 
     // Use bulk generation for efficiency
@@ -267,8 +285,21 @@ class AutomationController {
       },
     );
 
+    // Check if automation was stopped during processing
+    if (!this.session.automation.isActive || result.stopped) {
+      console.log('[AutomationController] Batch stopped or automation inactive');
+      nextBatch.status = 'stopped';
+      nextBatch.endTime = new Date();
+      nextBatch.results = result.results;
+      this.updateBatchStats(nextBatch);
+      this.archiveFailedLinks(nextBatch);
+      this.deleteBatchLinks(nextBatch);
+      this.session.currentBatch = null;
+      return; // Exit immediately without scheduling next batch
+    }
+
     // Update batch status
-    nextBatch.status = result.stopped ? 'stopped' : 'completed';
+    nextBatch.status = 'completed';
     nextBatch.endTime = new Date();
     nextBatch.results = result.results;
 
@@ -297,8 +328,8 @@ class AutomationController {
     // Update automation stats
     this.session.automation.totalBatchesCompleted++;
 
-    if (!result.stopped) {
-      // Schedule next batch
+    // Only schedule next batch if automation is still active
+    if (this.session.automation.isActive) {
       this.scheduleNextBatch();
     }
   }
@@ -373,6 +404,12 @@ class AutomationController {
    * Schedule next batch
    */
   scheduleNextBatch() {
+    // Double check automation is still active before scheduling
+    if (!this.session.automation.isActive) {
+      console.log('[AutomationController] Automation not active, skipping schedule');
+      return;
+    }
+
     const intervalMs = (this.session.settings.batchIntervalMinutes || 20) * 60 * 1000;
     const nextRunTime = new Date(Date.now() + intervalMs);
 
@@ -385,12 +422,26 @@ class AutomationController {
       intervalMinutes: this.session.settings.batchIntervalMinutes,
     });
 
+    // Clear any existing countdown interval first
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+    }
+
     // Countdown timer
     this.countdownInterval = setInterval(() => {
+      // Check if automation is still active during countdown
+      if (!this.session.automation.isActive) {
+        console.log('[AutomationController] Automation stopped during countdown');
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
+        return;
+      }
+
       const remaining = nextRunTime - Date.now();
 
       if (remaining <= 0) {
         clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
         this.processNextBatch();
       } else {
         this.emitSSE(this.userId, 'countdown:update', {
@@ -446,20 +497,37 @@ class AutomationController {
    */
   async stop() {
     console.log('[AutomationController] Stopping automation...');
+
+    // Set flags first to prevent any new batches from starting
     this.session.automation.isActive = false;
     this.session.automation.isPaused = false;
     this.puppeteer.setStop(true);
 
+    // Clear countdown interval to prevent next batch from scheduling
     if (this.countdownInterval) {
       clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+    }
+
+    // Clear next batch time
+    this.session.automation.nextBatchTime = null;
+
+    // If there's a current batch, mark it as stopped
+    if (this.session.currentBatch) {
+      const currentBatch = this.getCurrentBatch();
+      if (currentBatch) {
+        currentBatch.status = 'stopped';
+        currentBatch.endTime = new Date();
+      }
     }
 
     this.emitSSE(this.userId, 'automation:stopped', {});
 
-    // Reset stop flag after a delay
-    setTimeout(() => {
-      this.puppeteer.setStop(false);
-    }, 1000);
+    // Wait a bit for current processing to stop, then reset flag
+    await new Promise(resolve => setTimeout(resolve, 2000));
+    this.puppeteer.setStop(false);
+
+    console.log('[AutomationController] Automation stopped successfully');
 
     return {
       success: true,

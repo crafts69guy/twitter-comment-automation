@@ -8,7 +8,7 @@ const router = express.Router();
 const activeControllers = new Map();
 
 // Helper to get or create controller
-const getController = (req) => {
+const getController = req => {
   const userId = req.userId;
   const session = req.userSession;
   const emitSSE = req.app.get('emitSSE');
@@ -16,7 +16,7 @@ const getController = (req) => {
   if (!activeControllers.has(userId)) {
     activeControllers.set(
       userId,
-      new AutomationController(session, puppeteerServiceV2, emitSSE, userId)
+      new AutomationController(session, puppeteerServiceV2, emitSSE, userId),
     );
   }
 
@@ -36,7 +36,7 @@ router.post('/start', async (req, res) => {
     console.error('Error starting automation:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -54,7 +54,7 @@ router.post('/stop', async (req, res) => {
     console.error('Error stopping automation:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -72,7 +72,7 @@ router.post('/pause', async (req, res) => {
     console.error('Error pausing automation:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -90,7 +90,7 @@ router.post('/resume', async (req, res) => {
     console.error('Error resuming automation:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -108,7 +108,7 @@ router.post('/force-next', async (req, res) => {
     console.error('Error forcing next batch:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -126,13 +126,13 @@ router.post('/sync-sheets', async (req, res) => {
       success: true,
       message: `Synced ${newLinks.length} new links`,
       newLinks: newLinks.length,
-      totalLinks: req.userSession.allLinks.length
+      totalLinks: req.userSession.allLinks.length,
     });
   } catch (error) {
     console.error('Error syncing sheets:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -147,13 +147,13 @@ router.get('/status', (req, res) => {
     const status = controller.getStatus();
     res.json({
       success: true,
-      ...status
+      ...status,
     });
   } catch (error) {
     console.error('Error getting automation status:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -164,7 +164,15 @@ router.get('/status', (req, res) => {
  */
 router.post('/update-settings', (req, res) => {
   try {
-    const { batchSize, batchIntervalMinutes, aiProvider, apiKey, additionalPrompt, googleSheetUrl, twitterCookies, twitterBearerToken } = req.body;
+    const {
+      batchSize,
+      batchIntervalMinutes,
+      aiProvider,
+      additionalPrompt,
+      googleSheetUrl,
+      twitterCookies,
+      twitterBearerToken,
+    } = req.body;
 
     if (batchSize !== undefined) {
       req.userSession.settings.batchSize = parseInt(batchSize);
@@ -177,22 +185,23 @@ router.post('/update-settings', (req, res) => {
     }
 
     if (aiProvider) req.userSession.settings.aiProvider = aiProvider;
-    if (apiKey) req.userSession.settings.apiKey = apiKey;
-    if (additionalPrompt !== undefined) req.userSession.settings.additionalPrompt = additionalPrompt;
+    if (additionalPrompt !== undefined)
+      req.userSession.settings.additionalPrompt = additionalPrompt;
     if (googleSheetUrl) req.userSession.settings.googleSheetUrl = googleSheetUrl;
     if (twitterCookies !== undefined) req.userSession.settings.twitterCookies = twitterCookies;
-    if (twitterBearerToken !== undefined) req.userSession.settings.twitterBearerToken = twitterBearerToken;
+    if (twitterBearerToken !== undefined)
+      req.userSession.settings.twitterBearerToken = twitterBearerToken;
 
     res.json({
       success: true,
       message: 'Settings updated',
-      settings: req.userSession.settings
+      settings: req.userSession.settings,
     });
   } catch (error) {
     console.error('Error updating settings:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
