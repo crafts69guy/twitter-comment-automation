@@ -36,16 +36,36 @@ const SSE_URL = `${API_URL}/api/events/stream`;
 function App() {
   const toast = useToast();
 
+  // LocalStorage key for settings
+  const SETTINGS_STORAGE_KEY = 'twitter-automation-settings';
+
+  // Load settings from localStorage or use defaults
+  const loadSettingsFromStorage = () => {
+    try {
+      const stored = localStorage.getItem(SETTINGS_STORAGE_KEY);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        console.log('Loaded settings from localStorage:', parsed);
+        return parsed;
+      }
+    } catch (error) {
+      console.error('Error loading settings from localStorage:', error);
+    }
+    // Return defaults if nothing in storage
+    return {
+      googleSheetUrl: '',
+      aiProvider: 'gemini',
+      batchSize: 15,
+      batchIntervalMinutes: 20,
+      additionalPrompt: '',
+      twitterCookies: '',
+      twitterBearerToken: '',
+    };
+  };
+
   // State management
-  const [settings, setSettings] = useState({
-    googleSheetUrl: '',
-    aiProvider: 'gemini',
-    batchSize: 15,
-    batchIntervalMinutes: 20,
-    additionalPrompt: '',
-    twitterCookies: '',
-    twitterBearerToken: '',
-  });
+  const [settings, setSettings] = useState(loadSettingsFromStorage());
+  const [isSynced, setIsSynced] = useState(false);
 
   const [automationStatus, setAutomationStatus] = useState({
     isActive: false,
@@ -543,15 +563,36 @@ function App() {
         withCredentials: true,
       });
       if (response.data.success) {
-        setSettings(response.data.settings);
+        const updatedSettings = response.data.settings;
+        setSettings(updatedSettings);
+        
+        // Save to localStorage
+        try {
+          localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
+          console.log('Settings saved to localStorage:', updatedSettings);
+          setIsSynced(true);
+        } catch (storageError) {
+          console.error('Error saving settings to localStorage:', storageError);
+        }
+        
         toast({
           title: 'Settings Updated',
           status: 'success',
           duration: 1000,
         });
+        
+        return { success: true, settings: updatedSettings };
       }
+      return { success: false, error: 'Failed to update settings' };
     } catch (error) {
       console.error('Error updating settings:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to update settings',
+        status: 'error',
+        duration: 3000,
+      });
+      return { success: false, error: error.message };
     }
   };
 
@@ -607,6 +648,42 @@ function App() {
 
   // Initialize on mount
   useEffect(() => {
+    // Fetch automation status and sync with backend
+    const initializeApp = async () => {
+      try {
+        // Fetch current settings from backend
+        const statusResponse = await axios.get(`${API_BASE}/automation/status`, {
+          withCredentials: true,
+        });
+        
+        if (statusResponse.data.success && statusResponse.data.settings) {
+          const backendSettings = statusResponse.data.settings;
+          
+          // Merge backend settings with localStorage (backend takes priority)
+          setSettings(prevSettings => {
+            const mergedSettings = { ...prevSettings, ...backendSettings };
+            
+            // Update localStorage with backend settings
+            try {
+              localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(mergedSettings));
+              console.log('Synced settings from backend to localStorage:', mergedSettings);
+              setIsSynced(true);
+            } catch (error) {
+              console.error('Error saving to localStorage:', error);
+            }
+            
+            return mergedSettings;
+          });
+        }
+      } catch (error) {
+        console.error('Error initializing app:', error);
+        // Keep localStorage settings if backend fails
+        console.log('Using localStorage settings as fallback');
+        setIsSynced(false);
+      }
+    };
+
+    initializeApp();
     fetchAutomationStatus();
     fetchFailedLinks();
     fetchBrowserStatus();
@@ -680,6 +757,7 @@ function App() {
                   settings={settings}
                   onUpdateSettings={updateSettings}
                   onSyncSheets={syncGoogleSheets}
+                  isSynced={isSynced}
                 />
               </TabPanel>
 

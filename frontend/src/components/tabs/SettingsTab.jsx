@@ -17,14 +17,19 @@ import {
   Text,
   Divider,
   Badge,
+  HStack,
+  Icon,
 } from '@chakra-ui/react';
+import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 
-function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
+function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = false }) {
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [lastSaved, setLastSaved] = useState(null);
 
   useEffect(() => {
     setLocalSettings(settings);
+    setHasUnsavedChanges(false);
   }, [settings]);
 
   const handleChange = (field, value) => {
@@ -35,9 +40,12 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
     setHasUnsavedChanges(true);
   };
 
-  const handleSave = () => {
-    onUpdateSettings(localSettings);
-    setHasUnsavedChanges(false);
+  const handleSave = async () => {
+    const result = await onUpdateSettings(localSettings);
+    if (result && result.success) {
+      setHasUnsavedChanges(false);
+      setLastSaved(new Date());
+    }
   };
 
   const handleReset = () => {
@@ -50,17 +58,34 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
       <VStack spacing={6} align="stretch">
         {/* Header */}
         <Box>
-          <Heading size="md" mb={2}>
-            Automation Settings
-          </Heading>
+          <HStack justify="space-between" mb={2}>
+            <Heading size="md">Automation Settings</Heading>
+            <HStack spacing={2}>
+              {isSynced ? (
+                <Badge colorScheme="green" display="flex" alignItems="center" gap={1}>
+                  <Icon as={CheckCircleIcon} />
+                  Synced
+                </Badge>
+              ) : (
+                <Badge colorScheme="yellow" display="flex" alignItems="center" gap={1}>
+                  <Icon as={WarningIcon} />
+                  Using Cache
+                </Badge>
+              )}
+              {hasUnsavedChanges && <Badge colorScheme="orange">Unsaved Changes</Badge>}
+            </HStack>
+          </HStack>
           <Text color="gray.600" fontSize="sm">
             Configure your automation workflow and AI settings
           </Text>
-          {hasUnsavedChanges && (
-            <Badge colorScheme="orange" mt={2}>
-              Unsaved Changes
-            </Badge>
+          {lastSaved && (
+            <Text color="gray.500" fontSize="xs" mt={1}>
+              Last saved: {lastSaved.toLocaleTimeString()}
+            </Text>
           )}
+          <Text color="blue.600" fontSize="xs" mt={1}>
+            💾 Settings are automatically cached in your browser
+          </Text>
         </Box>
 
         <Divider />
@@ -233,7 +258,8 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
                 rows={3}
               />
               <Text fontSize="xs" color="gray.600" mt={1}>
-                Export cookies from Twitter/X using browser extension (Cookie Editor, EditThisCookie)
+                Export cookies from Twitter/X using browser extension (Cookie Editor,
+                EditThisCookie)
               </Text>
             </FormControl>
           </VStack>
