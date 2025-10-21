@@ -1,719 +1,500 @@
 import puppeteer from 'puppeteer';
 import fs from 'fs';
 
-class PuppeteerService {
+class PuppeteerServiceV2 {
   constructor() {
     this.browser = null;
-    this.defaultMaxTabs = 5;
-    this.activeTabs = new Map(); // Track active tabs by URL
-    this.cancelAutoReply = false; // Flag to cancel auto-reply batch process
-    this.latestTab = null; // Track the most recently used tab
+    this.currentPage = null; // Single persistent tab
+    this.isProcessing = false;
+    this.shouldPause = false;
+    this.shouldStop = false;
   }
 
   async getBrowserStatus() {
-    // Check if browser reference exists and is actually connected
     let isActuallyOpen = false;
     if (this.browser) {
       try {
-        // Try to check if browser is still connected
         const isConnected = this.browser.isConnected();
         isActuallyOpen = isConnected;
 
-        // If not connected, clean up the reference
         if (!isConnected) {
           this.browser = null;
-          this.activeTabs.clear();
+          this.currentPage = null;
         }
       } catch (error) {
-        // If any error occurs, assume browser is closed
         this.browser = null;
-        this.activeTabs.clear();
+        this.currentPage = null;
         isActuallyOpen = false;
       }
     }
 
     return {
       isOpen: isActuallyOpen,
-      activeTabs: this.activeTabs.size,
+      currentUrl: this.currentPage ? await this.getCurrentUrl() : null
     };
   }
 
-  async getBrowserStatus() {
-    // Check if browser reference exists and is actually connected
-    let isActuallyOpen = false;
-    if (this.browser) {
-      try {
-        // Try to check if browser is still connected
-        const isConnected = this.browser.isConnected();
-        isActuallyOpen = isConnected;
-
-        // If not connected, clean up the reference
-        if (!isConnected) {
-          this.browser = null;
-          this.activeTabs.clear();
-        }
-      } catch (error) {
-        // If any error occurs, assume browser is closed
-        this.browser = null;
-        this.activeTabs.clear();
-        isActuallyOpen = false;
-      }
+  async getCurrentUrl() {
+    if (!this.currentPage) return null;
+    try {
+      return await this.currentPage.url();
+    } catch {
+      return null;
     }
+  }
 
-    return {
-      isOpen: isActuallyOpen,
-      activeTabs: this.activeTabs.size,
-    };
+  async ensureBrowserOpen() {
+    if (!this.browser || !this.browser.isConnected()) {
+      await this.initialize();
+    }
+    return this.currentPage;
   }
 
   async initialize() {
-    if (!this.browser) {
-      // Configuration for browser launch
-      let launchOptions = {
-        headless: false,
-        args: [
-          '--no-sandbox',
-          '--disable-setuid-sandbox',
-          '--disable-dev-shm-usage',
-          '--disable-accelerated-2d-canvas',
-          '--no-first-run',
-          '--no-zygote',
-          '--disable-gpu',
-          '--disable-blink-features=AutomationControlled',
-          '--window-size=1920,1080',
-          '--disable-web-security',
-          '--disable-features=IsolateOrigins,site-per-process',
-          '--allow-running-insecure-content',
-          '--no-default-browser-check',
-          '--disable-infobars',
-          '--exclude-switches=enable-automation',
-          '--enable-features=NetworkService,NetworkServiceInProcess',
-          '--disable-background-timer-throttling',
-          '--disable-backgrounding-occluded-windows',
-          '--disable-renderer-backgrounding',
-          '--disable-features=TranslateUI',
-        ],
-      };
+    if (this.browser && this.browser.isConnected()) {
+      console.log('Browser already open');
+      return;
+    }
 
-      // Check if running in Docker (Alpine Linux with Chromium)
-      if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-        console.log('Using Docker Chromium from env:', process.env.PUPPETEER_EXECUTABLE_PATH);
-        launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-      } else if (fs.existsSync('/usr/bin/chromium-browser')) {
-        // Alpine Linux Chromium
-        console.log('Using Alpine Chromium: /usr/bin/chromium-browser');
-        launchOptions.executablePath = '/usr/bin/chromium-browser';
-      } else if (process.platform === 'darwin') {
-        // macOS
-        const chromePath = '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+    let launchOptions = {
+      headless: false,
+      args: [
+        '--no-sandbox',
+        '--disable-setuid-sandbox',
+        '--disable-dev-shm-usage',
+        '--disable-accelerated-2d-canvas',
+        '--no-first-run',
+        '--no-zygote',
+        '--disable-gpu',
+        '--disable-blink-features=AutomationControlled',
+        '--window-size=1920,1080',
+        '--disable-web-security',
+        '--disable-features=IsolateOrigins,site-per-process',
+        '--allow-running-insecure-content',
+        '--no-default-browser-check',
+        '--disable-infobars',
+        '--exclude-switches=enable-automation',
+        '--enable-features=NetworkService,NetworkServiceInProcess',
+        '--disable-background-timer-throttling',
+        '--disable-backgrounding-occluded-windows',
+        '--disable-renderer-backgrounding',
+        '--disable-features=TranslateUI',
+      ],
+    };
+
+    // Check if running in Docker (Alpine Linux with Chromium)
+    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
+      console.log('Using Docker Chromium from env:', process.env.PUPPETEER_EXECUTABLE_PATH);
+      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    } else {
+      // Auto-detect Chrome/Chromium path based on platform
+      const platform = process.platform;
+      const possiblePaths = this.getChromePaths(platform);
+
+      for (const chromePath of possiblePaths) {
         if (fs.existsSync(chromePath)) {
-          console.log('Using macOS Chrome:', chromePath);
+          console.log(`Found Chrome at: ${chromePath}`);
           launchOptions.executablePath = chromePath;
-        }
-      } else if (process.platform === 'win32') {
-        // Windows
-        const windowsPaths = [
-          'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
-          'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
-        ];
-
-        for (const path of windowsPaths) {
-          if (fs.existsSync(path)) {
-            console.log('Using Windows Chrome:', path);
-            launchOptions.executablePath = path;
-            break;
-          }
-        }
-      } else {
-        // Linux
-        const linuxPaths = [
-          '/usr/bin/google-chrome',
-          '/usr/bin/google-chrome-stable',
-          '/usr/bin/chromium-browser',
-          '/usr/bin/chromium',
-        ];
-
-        for (const path of linuxPaths) {
-          if (fs.existsSync(path)) {
-            console.log('Using Linux Chrome/Chromium:', path);
-            launchOptions.executablePath = path;
-            break;
-          }
+          break;
         }
       }
 
-      // If no executable found, use Puppeteer's bundled Chromium
       if (!launchOptions.executablePath) {
-        console.log("No Chrome/Chromium found, using Puppeteer's bundled Chromium");
-      }
-
-      this.browser = await puppeteer.launch(launchOptions);
-      console.log('Browser opened successfully');
-    }
-    return this.browser;
-  }
-
-  async getOrCreateTab(url) {
-    await this.initialize();
-
-    // Check if we already have a tab for this URL or similar
-    const baseUrl = url.split('?')[0]; // Remove query parameters for comparison
-
-    if (this.activeTabs.has(baseUrl)) {
-      const existingPage = this.activeTabs.get(baseUrl);
-      try {
-        // Check if the tab is still valid
-        await existingPage.evaluate(() => window.location.href);
-        console.log(`Reusing existing tab for: ${baseUrl}`);
-        this.latestTab = existingPage;
-        return existingPage;
-      } catch (error) {
-        // Tab is closed or invalid, remove from map
-        this.activeTabs.delete(baseUrl);
+        console.log('No Chrome found, using default Puppeteer Chromium');
       }
     }
 
-    // Create new tab
-    const page = await this.browser.newPage();
+    console.log('Launching browser with options:', launchOptions);
+    this.browser = await puppeteer.launch(launchOptions);
+    this.currentPage = await this.browser.newPage();
 
-    // Set user agent to avoid detection
-    await page.setUserAgent(
-      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    // Set viewport
+    await this.currentPage.setViewport({ width: 1920, height: 1080 });
+
+    // Set user agent to mimic real browser
+    await this.currentPage.setUserAgent(
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     );
 
-    // Set viewport to desktop size
-    await page.setViewport({ width: 1920, height: 1080 });
-
-    this.activeTabs.set(baseUrl, page);
-    this.latestTab = page;
-    console.log(`Created new tab for: ${baseUrl}`);
-    return page;
+    console.log('Browser initialized with single persistent tab');
   }
 
-  async scrapeTweet(url, page) {
-    try {
-      // Set viewport to desktop size
-      await page.setViewport({ width: 1920, height: 1080 });
+  getChromePaths(platform) {
+    const paths = {
+      darwin: [
+        '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+        '/Applications/Chromium.app/Contents/MacOS/Chromium',
+      ],
+      linux: [
+        '/usr/bin/google-chrome',
+        '/usr/bin/chromium',
+        '/usr/bin/chromium-browser',
+        '/snap/bin/chromium',
+      ],
+      win32: [
+        'C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe',
+        'C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe',
+      ],
+    };
 
-      // Navigate to the URL with longer timeout
-      await page.goto(url, {
-        waitUntil: 'networkidle2',
-        timeout: 60000,
-      });
-
-      // Wait longer for React app to fully render
-      await new Promise(resolve => setTimeout(resolve, 8000));
-
-      // Enhanced selectors for Twitter/X
-      const selectors = {
-        // Main tweet selectors
-        article: 'article[data-testid="tweet"]',
-        articleFallback: 'article',
-        tweetText: '[data-testid="tweetText"]',
-
-        // Alternative text selectors
-        tweetTextSpan: 'div[data-testid="tweetText"] span',
-        langDiv: 'div[lang][dir="auto"]',
-
-        // User selectors
-        userName: '[data-testid="User-Name"]',
-        userNameAlt: 'div[dir=auto] span',
-
-        // Metrics
-        likeButton: '[data-testid="like"]',
-        retweetButton: '[data-testid="retweet"]',
-        replyButton: '[data-testid="reply"]',
-      };
-
-      // Wait for main content with multiple fallbacks
-      await Promise.race([
-        page.waitForSelector(selectors.tweetText, { timeout: 15000 }),
-        page.waitForSelector(selectors.langDiv, { timeout: 15000 }),
-        page.waitForSelector(selectors.article, { timeout: 15000 }),
-      ]).catch(() => {
-        console.log(`Warning: Could not find expected selectors for ${url}`);
-      });
-
-      // Extract tweet content with enhanced logic
-      const tweetData = await page.evaluate(sels => {
-        // Helper function to get text content
-        const getText = selector => {
-          const element = document.querySelector(selector);
-          return element ? element.innerText || element.textContent : '';
-        };
-
-        // Get tweet text - try multiple methods
-        let tweetText = '';
-
-        // Method 1: Direct tweet text selector
-        tweetText = getText(sels.tweetText);
-
-        // Method 2: Try span inside tweet text div
-        if (!tweetText) {
-          const spans = document.querySelectorAll(sels.tweetTextSpan);
-          if (spans.length > 0) {
-            tweetText = Array.from(spans)
-              .map(span => span.textContent)
-              .join('');
-          }
-        }
-
-        // Method 3: Look for any div with lang attribute
-        if (!tweetText) {
-          const langDivs = document.querySelectorAll(sels.langDiv);
-          for (const div of langDivs) {
-            const text = div.innerText || div.textContent;
-            if (text && text.length > 10) {
-              // Likely tweet content
-              tweetText = text;
-              break;
-            }
-          }
-        }
-
-        // Method 4: Fallback - look for any text content in articles
-        if (!tweetText) {
-          const articles = document.querySelectorAll('article');
-          for (const article of articles) {
-            const spans = article.querySelectorAll('span[dir=auto]');
-            for (const span of spans) {
-              const text = span.innerText || span.textContent;
-              if (text && text.length > 10 && !text.includes('@')) {
-                tweetText = text;
-                break;
-              }
-            }
-            if (tweetText) break;
-          }
-        }
-
-        // Get author information
-        let authorName = '';
-        let authorHandle = '';
-
-        const userNameElement = document.querySelector(sels.userName);
-        if (userNameElement) {
-          const text = userNameElement.innerText || userNameElement.textContent;
-          const lines = text.split('\n');
-          authorName = lines[0] || '';
-
-          // Extract handle
-          const handleMatch = text.match(/@[\w]+/);
-          authorHandle = handleMatch ? handleMatch[0] : '';
-        } else {
-          // Fallback: look for user info in page
-          const links = document.querySelectorAll('a[href*="/"]');
-          for (const link of links) {
-            const href = link.getAttribute('href');
-            if (href && href.match(/^\/[\w]+$/) && !href.includes('/home')) {
-              const text = link.innerText || link.textContent;
-              if (text && !text.includes('@')) {
-                authorName = text;
-                authorHandle = '@' + href.substring(1);
-                break;
-              }
-            }
-          }
-        }
-
-        // Get metrics with better extraction
-        const getMetric = selector => {
-          const element = document.querySelector(selector);
-          if (element) {
-            const ariaLabel = element.getAttribute('aria-label');
-            if (ariaLabel) {
-              const match = ariaLabel.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/);
-              return match ? match[1] : '0';
-            }
-            // Fallback: look for text in button
-            const text = element.innerText || element.textContent;
-            if (text) {
-              const match = text.match(/(\d+(?:,\d+)*(?:\.\d+)?[KMB]?)/);
-              return match ? match[1] : '0';
-            }
-          }
-          return '0';
-        };
-
-        return {
-          content: tweetText || 'Could not extract tweet content',
-          author: authorName || 'Unknown',
-          handle: authorHandle || '@unknown',
-          likes: getMetric(sels.likeButton),
-          retweets: getMetric(sels.retweetButton),
-          replies: getMetric(sels.replyButton),
-          timestamp: new Date().toISOString(),
-          debug: {
-            foundTweetText: !!tweetText,
-            foundAuthor: !!authorName,
-            textLength: tweetText.length,
-          },
-        };
-      }, selectors);
-
-      console.log(
-        `Scraped ${url}: Found text: ${tweetData.debug.foundTweetText}, Length: ${tweetData.debug.textLength}`,
-      );
-
-      return tweetData;
-    } catch (error) {
-      console.error(`Error scraping ${url}:`, error.message);
-      return {
-        error: error.message,
-        content: '',
-        author: '',
-        handle: '',
-        likes: '0',
-        retweets: '0',
-        replies: '0',
-      };
-    }
+    return paths[platform] || [];
   }
 
-  async scrapeBatch(urls, maxTabs = null) {
-    await this.initialize();
-
-    // Use provided maxTabs or default
-    const tabLimit = maxTabs || this.defaultMaxTabs;
-
-    // Process URLs in batches of tabLimit
+  /**
+   * Process batch sequentially with single tab
+   * @param {Array} links - Array of link objects { id, url, comment, content }
+   * @param {Function} onProgress - Callback for progress updates
+   * @param {Function} onLinkComplete - Callback when each link completes
+   * @returns {Object} - { completed: bool, stopped: bool, results: array, processedCount: number }
+   */
+  async processBatchSequential(links, onProgress, onLinkComplete) {
+    const page = await this.ensureBrowserOpen();
     const results = [];
-    for (let i = 0; i < urls.length; i += tabLimit) {
-      const batch = urls.slice(i, i + tabLimit);
+    this.isProcessing = true;
+    this.shouldStop = false;
 
-      // Create pages for parallel processing
-      const pagePromises = batch.map(async url => {
-        let page = null;
-        try {
-          page = await this.browser.newPage();
+    console.log(`Starting sequential batch processing for ${links.length} links`);
 
-          // Set user agent to avoid detection
-          await page.setUserAgent(
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-          );
+    for (let i = 0; i < links.length; i++) {
+      // Check stop flag
+      if (this.shouldStop) {
+        console.log('Batch processing stopped by user');
+        this.isProcessing = false;
+        return { stopped: true, results, processedCount: i };
+      }
 
-          // Only block heavy resources, keep CSS for proper rendering
-          await page.setRequestInterception(true);
-          page.on('request', request => {
-            const resourceType = request.resourceType();
-            if (['image', 'font', 'media'].includes(resourceType)) {
-              request.abort();
-            } else {
-              request.continue();
-            }
-          });
+      // Handle pause
+      while (this.shouldPause && !this.shouldStop) {
+        console.log('Processing paused, waiting...');
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
 
-          const result = await this.scrapeTweet(url, page);
+      const link = links[i];
+      console.log(`Processing link ${i + 1}/${links.length}: ${link.url}`);
 
-          return {
-            url,
-            ...result,
-          };
-        } catch (error) {
-          console.error(`Error processing ${url}:`, error.message);
-          return {
-            url,
-            error: error.message,
-          };
-        } finally {
-          // Always close the page if it was created
-          if (page) {
-            try {
-              await page.close();
-            } catch (closeError) {
-              console.error('Error closing page:', closeError.message);
-            }
-          }
+      // Progress callback
+      if (onProgress) {
+        onProgress({
+          currentIndex: i,
+          total: links.length,
+          currentLink: link,
+          percentage: Math.round(((i + 1) / links.length) * 100)
+        });
+      }
+
+      try {
+        // Navigate to link (reuse same tab)
+        await page.goto(link.url, {
+          waitUntil: 'networkidle2',
+          timeout: 30000
+        });
+
+        console.log(`Navigated to: ${link.url}`);
+
+        // Wait for page to settle
+        await new Promise(resolve => setTimeout(resolve, 3000));
+
+        // Auto-reply workflow: Like + Comment
+        await this.autoReplyOnPage(page, link.comment);
+
+        const result = {
+          linkId: link.id,
+          status: 'success',
+          processedAt: new Date()
+        };
+
+        results.push(result);
+        console.log(`✅ Link ${i + 1} processed successfully`);
+
+        // Callback for completed link
+        if (onLinkComplete) {
+          onLinkComplete(result);
         }
-      });
 
-      // Wait for all pages in batch to complete
-      const batchResults = await Promise.all(pagePromises);
-      results.push(...batchResults);
+      } catch (error) {
+        console.error(`❌ Error processing link ${i + 1}:`, error.message);
 
-      // Add delay between batches to avoid rate limiting
-      if (i + tabLimit < urls.length) {
+        const result = {
+          linkId: link.id,
+          status: 'failed',
+          error: error.message,
+          processedAt: new Date()
+        };
+
+        results.push(result);
+
+        // Callback for failed link
+        if (onLinkComplete) {
+          onLinkComplete(result);
+        }
+      }
+
+      // Delay between links to avoid rate limiting
+      if (i < links.length - 1) {
+        console.log('Waiting 2 seconds before next link...');
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
     }
 
-    return results;
+    this.isProcessing = false;
+    console.log(`Batch processing completed: ${results.length} links processed`);
+
+    return {
+      completed: true,
+      stopped: false,
+      results,
+      processedCount: links.length
+    };
   }
 
-  async autoReply(url, comment) {
-    let page = null;
-    let isNewTab = false;
+  /**
+   * Like and reply on current page
+   * @param {Page} page - Puppeteer page object
+   * @param {String} comment - Comment text to post
+   */
+  async autoReplyOnPage(page, comment) {
+    console.log('Starting auto-reply workflow...');
+
+    // Step 1: Like the post
+    await this.likePost(page);
+
+    // Step 2: Reply to the post
+    await this.replyToPost(page, comment);
+
+    console.log('Auto-reply workflow completed');
+  }
+
+  /**
+   * Like a post
+   */
+  async likePost(page) {
     try {
-      // Get or reuse existing tab for this URL
-      page = await this.getOrCreateTab(url);
-      const currentUrl = await page.evaluate(() => window.location.href);
+      console.log('Attempting to like post...');
 
-      // Only navigate if we're not already on the right page
-      if (!currentUrl.includes(url.split('/').pop())) {
-        console.log(`Navigating to: ${url}`);
-        await page.goto(url, {
-          waitUntil: 'networkidle2',
-          timeout: 30000,
-        });
-        isNewTab = true;
+      // Pre-delay before liking
+      await new Promise(resolve => setTimeout(resolve, 2500));
+
+      // Find the first cell container
+      const firstCell = await page.waitForSelector('[data-testid="cellInnerDiv"]', {
+        timeout: 10000
+      });
+
+      // Check if already liked
+      const isLiked = await page.$('[data-testid="unlike"]');
+
+      if (isLiked) {
+        console.log('Post already liked, skipping...');
+        return;
+      }
+
+      // Find and click like button
+      const likeButton = await page.$('[data-testid="like"]');
+
+      if (likeButton) {
+        await likeButton.click();
+        console.log('✅ Post liked');
+
+        // Post-like delay
+        await new Promise(resolve => setTimeout(resolve, 5000));
       } else {
-        console.log(`Already on the correct page: ${url}`);
+        console.log('Like button not found');
       }
 
-      // Wait for page to load
+    } catch (error) {
+      console.error('Error liking post:', error.message);
+      // Continue even if like fails
+    }
+  }
+
+  /**
+   * Reply to a post
+   */
+  async replyToPost(page, comment) {
+    try {
+      console.log('Attempting to reply to post...');
+
+      // Click reply button to open reply textarea
+      const replyButton = await page.waitForSelector('[data-testid="reply"]', {
+        timeout: 10000
+      });
+
+      await replyButton.click();
+      console.log('Clicked reply button');
+
+      // Wait for reply textarea to appear
+      const textarea = await page.waitForSelector(
+        '[data-testid="tweetTextarea_0"][role="textbox"]',
+        { timeout: 10000 }
+      );
+
+      console.log('Reply textarea found');
+
+      // Click textarea to focus
+      await textarea.click();
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Type comment character by character (simulate natural typing)
+      console.log(`Typing comment: "${comment}"`);
+      for (const char of comment) {
+        await textarea.type(char);
+        await new Promise(resolve => setTimeout(resolve, 30)); // 30ms delay between chars
+      }
+
+      console.log('Comment typed successfully');
+
+      // Wait before submitting
       await new Promise(resolve => setTimeout(resolve, 3000));
 
-      // Try to like the post first
+      // Find and click submit button
+      const submitButton = await this.waitForEnabledSubmitButton(page);
+
+      if (submitButton) {
+        await submitButton.click();
+        console.log('✅ Reply submitted');
+
+        // Final delay to ensure reply is posted
+        await new Promise(resolve => setTimeout(resolve, 3000));
+      } else {
+        throw new Error('Submit button not found or not enabled');
+      }
+
+    } catch (error) {
+      console.error('Error replying to post:', error.message);
+      throw error;
+    }
+  }
+
+  /**
+   * Wait for submit button to be enabled
+   */
+  async waitForEnabledSubmitButton(page, maxWaitTime = 15000) {
+    const startTime = Date.now();
+
+    while (Date.now() - startTime < maxWaitTime) {
       try {
-        // Get the first cellInnerDiv (the main post, not replies)
-        const firstCell = await page.$('[data-testid="cellInnerDiv"]');
+        const submitButton = await page.$('button[data-testid="tweetButtonInline"]');
 
-        if (firstCell) {
-          // Check if post is already liked (data-testid="unlike")
-          const unlikeButton = await firstCell.$('[data-testid="unlike"]');
+        if (submitButton) {
+          const isDisabled = await page.evaluate(btn => btn.disabled, submitButton);
 
-          if (unlikeButton) {
-            console.log('Post already liked, skipping');
-          } else {
-            // Post not liked yet, find and click like button
-            const likeButton = await firstCell.$('[data-testid="like"]');
-            if (likeButton) {
-              await new Promise(resolve => setTimeout(resolve, 2500));
-
-              await likeButton.click();
-              console.log('Post liked successfully');
-
-              await new Promise(resolve => setTimeout(resolve, 5000));
-            } else {
-              console.log('Like button not found, continuing with reply');
-            }
+          if (!isDisabled) {
+            console.log('Submit button is enabled');
+            return submitButton;
           }
-        } else {
-          console.log('Post cell not found, continuing with reply');
         }
-      } catch (error) {
-        console.log(`Failed to like post: ${error.message}, continuing with reply`);
-      }
 
-      // Try to find and click the reply button
-      const replySelectors = ['[data-testid="tweetTextarea_0"][role="textbox"]'];
-
-      let replyClicked = false;
-      for (const selector of replySelectors) {
-        try {
-          await page.waitForSelector(selector, { timeout: 5000 });
-          await page.click(selector);
-          replyClicked = true;
-          console.log(`Reply button clicked using selector: ${selector}`);
-          break;
-        } catch (error) {
-          console.log(`Failed to click reply with selector ${selector}`);
-          continue;
-        }
-      }
-
-      if (!replyClicked) {
-        throw new Error('Could not find reply button');
-      }
-
-      // Wait longer for the reply modal to fully load
-      await new Promise(resolve => setTimeout(resolve, 3000));
-
-      try {
-        // await element.click();
+        // Wait 500ms before checking again
         await new Promise(resolve => setTimeout(resolve, 500));
 
-        // Type the comment character by character
-        for (const char of comment) {
-          await page.keyboard.type(char, { delay: 30 });
-        }
-
-        console.log(`Comment typed successfully`);
       } catch (error) {
-        console.log(`Failed with selector ${selector}: ${error.message}`);
+        console.log('Waiting for submit button...');
       }
+    }
 
-      const submitSelectors = ['button[data-testid="tweetButtonInline"]'];
+    console.error('Submit button did not become enabled within timeout');
+    return null;
+  }
 
-      let submitClicked = false;
+  /**
+   * Set pause state
+   */
+  setPause(shouldPause) {
+    this.shouldPause = shouldPause;
+    console.log(`Pause state set to: ${shouldPause}`);
+  }
 
-      // Wait for the button to become enabled (check modal button first, then inline)
-      let buttonEnabled = false;
-      for (let i = 0; i < 15; i++) {
-        try {
-          let button = await page.$('button[data-testid="tweetButtonInline"]');
-          let buttonSelector = 'button[data-testid="tweetButtonInline"]';
+  /**
+   * Set stop state
+   */
+  setStop(shouldStop) {
+    this.shouldStop = shouldStop;
+    console.log(`Stop state set to: ${shouldStop}`);
+  }
 
-          if (button) {
-            const isDisabled = await page.$eval(
-              buttonSelector,
-              el => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
-            );
+  /**
+   * Close browser
+   */
+  async closeBrowser() {
+    if (this.browser) {
+      console.log('Closing browser...');
+      await this.browser.close();
+      this.browser = null;
+      this.currentPage = null;
+      console.log('Browser closed');
+    }
+  }
 
-            if (!isDisabled) {
-              buttonEnabled = true;
-              console.log(`Reply button is now enabled using selector: ${buttonSelector}`);
-              break;
-            } else {
-              console.log(`Button found but still disabled: ${buttonSelector}`);
-            }
-          } else {
-            console.log(`No reply button found yet, attempt ${i + 1}`);
+  /**
+   * Scrape tweet (legacy method for compatibility)
+   */
+  async scrapeTweet(url) {
+    const page = await this.ensureBrowserOpen();
+
+    try {
+      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
+      await new Promise(resolve => setTimeout(resolve, 8000));
+
+      const tweetData = await page.evaluate(() => {
+        const selectors = {
+          text: '[data-testid="tweetText"]',
+          userName: '[data-testid="User-Name"]',
+          like: '[data-testid="like"]',
+          retweet: '[data-testid="retweet"]',
+          reply: '[data-testid="reply"]'
+        };
+
+        const getText = () => {
+          const textElement = document.querySelector(selectors.text);
+          if (textElement) return textElement.innerText;
+
+          const spans = document.querySelectorAll('[data-testid="tweetText"] span');
+          if (spans.length > 0) {
+            return Array.from(spans).map(span => span.innerText).join(' ');
           }
-        } catch (e) {
-          console.log(`Error checking button: ${e.message}`);
-        }
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      }
 
-      if (buttonEnabled) {
-        for (const selector of submitSelectors) {
-          try {
-            const button = await page.$(selector);
-            if (button) {
-              // Double-check that the button is actually enabled before clicking
-              const isActuallyDisabled = await page
-                .$eval(
-                  selector,
-                  el => el.hasAttribute('disabled') || el.getAttribute('aria-disabled') === 'true',
-                )
-                .catch(() => true); // If eval fails, assume disabled
+          return null;
+        };
 
-              if (!isActuallyDisabled) {
-                await new Promise(resolve => setTimeout(resolve, 3000));
-                await button.click();
-                submitClicked = true;
-                console.log(`Submit button clicked using selector: ${selector}`);
-                break;
-              } else {
-                console.log(`Button found but disabled, skipping: ${selector}`);
-              }
-            }
-          } catch (error) {
-            console.log(`Failed to click submit with selector ${selector}: ${error.message}`);
-            continue;
-          }
-        }
-      }
+        const text = getText();
 
-      if (!submitClicked) {
-        console.log('Submit button not found or disabled, reply may still be successful');
-      }
+        const userElement = document.querySelector(selectors.userName);
+        const userName = userElement ? userElement.innerText.split('\n')[0] : null;
 
-      // Wait to see if reply was successful
-      await new Promise(resolve => setTimeout(resolve, 3000));
+        const getMetric = (selector) => {
+          const element = document.querySelector(selector);
+          if (!element) return 0;
+          const ariaLabel = element.getAttribute('aria-label');
+          if (!ariaLabel) return 0;
+          const match = ariaLabel.match(/(\d+(?:,\d+)*)/);
+          return match ? parseInt(match[1].replace(/,/g, '')) : 0;
+        };
+
+        return {
+          text,
+          author: userName,
+          likes: getMetric(selectors.like),
+          retweets: getMetric(selectors.retweet),
+          replies: getMetric(selectors.reply)
+        };
+      });
 
       return {
         success: true,
-        message: 'Reply posted successfully',
+        url,
+        ...tweetData
       };
+
     } catch (error) {
-      console.error(`Error auto-replying to ${url}:`, error.message);
+      console.error('Error scraping tweet:', error.message);
       return {
         success: false,
-        error: error.message,
+        url,
+        error: error.message
       };
-    } finally {
-      // Close the tab after commenting, but keep the latest one open
-      if (page && page !== this.latestTab) {
-        try {
-          const baseUrl = url.split('?')[0];
-          this.activeTabs.delete(baseUrl);
-          await page.close();
-          console.log(`Closed tab after commenting: ${url}`);
-        } catch (closeError) {
-          console.error('Error closing tab:', closeError.message);
-        }
-      } else if (page === this.latestTab) {
-        console.log('Keeping latest tab open');
-      }
-    }
-  }
-
-  async autoReplyBatch(posts) {
-    const results = [];
-    this.cancelAutoReply = false; // Reset cancel flag at start
-
-    for (const post of posts) {
-      // Check if cancellation was requested
-      if (this.cancelAutoReply) {
-        console.log('Auto-reply batch cancelled by user');
-        results.push({
-          postId: post.id,
-          url: post.url,
-          success: false,
-          error: 'Process cancelled by user',
-          cancelled: true,
-        });
-        continue;
-      }
-
-      if (!post.comment || post.comment.trim() === '') {
-        results.push({
-          postId: post.id,
-          url: post.url,
-          success: false,
-          error: 'No comment available',
-        });
-        continue;
-      }
-
-      console.log(`Auto-replying to: ${post.url}`);
-      const result = await this.autoReply(post.url, post.comment);
-
-      results.push({
-        postId: post.id,
-        url: post.url,
-        comment: post.comment,
-        ...result,
-      });
-
-      // Add delay between replies to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 5000));
-    }
-
-    return results;
-  }
-
-  cancelAutoReplyBatch() {
-    this.cancelAutoReply = true;
-    console.log('Cancel auto-reply batch requested');
-  }
-
-  async closeAllTabs() {
-    console.log('Closing all active tabs...');
-    for (const [url, page] of this.activeTabs) {
-      try {
-        await page.close();
-        console.log(`Closed tab for: ${url}`);
-      } catch (error) {
-        console.error(`Error closing tab for ${url}:`, error.message);
-      }
-    }
-    this.activeTabs.clear();
-  }
-
-  async close() {
-    await this.closeAllTabs();
-    if (this.browser) {
-      await this.browser.close();
-      this.browser = null;
     }
   }
 }
 
-// Create singleton instance
-const puppeteerService = new PuppeteerService();
-
-// Cleanup on process termination
-process.on('SIGINT', async () => {
-  await puppeteerService.close();
-  process.exit(0);
-});
-
-process.on('SIGTERM', async () => {
-  await puppeteerService.close();
-  process.exit(0);
-});
-
-export default puppeteerService;
+// Singleton instance
+const puppeteerServiceV2 = new PuppeteerServiceV2();
+export default puppeteerServiceV2;

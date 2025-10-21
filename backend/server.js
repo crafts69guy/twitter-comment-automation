@@ -4,18 +4,12 @@ import cors from "cors";
 import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
 import googleSheetsRouter from "./routes/googleSheets.js";
-import scraperRouter from "./routes/scraper.js";
 import aiRouter from "./routes/ai.js";
 import postsRouter from "./routes/posts.js";
-import autoReplyRouter from "./routes/autoReply.js";
 import automationRouter from "./routes/automation.js";
-import browserRouter from "./routes/browser.js";
-
-// V2 Routes (new workflow)
-import automationV2Router from "./routes/automationV2.js";
 import batchesRouter from "./routes/batches.js";
 import failedLinksRouter from "./routes/failedLinks.js";
-import browserV2Router from "./routes/browserV2.js";
+import browserRouter from "./routes/browser.js";
 
 dotenv.config();
 
@@ -148,20 +142,14 @@ export const emitSSE = (userId, eventType, data) => {
 app.set("sessions", sessions);
 app.set("emitSSE", emitSSE);
 
-// Legacy routes (V1)
+// Routes
 app.use("/api/google-sheets", googleSheetsRouter);
-app.use("/api/scraper", scraperRouter);
 app.use("/api/ai", aiRouter);
 app.use("/api/posts", postsRouter);
-app.use("/api/auto-reply", autoReplyRouter);
-app.use("/api/automation", automationRouter);
-app.use("/api/browser", browserRouter);
-
-// V2 routes (new workflow)
-app.use("/api/v2/automation", automationV2Router);
+app.use("/api/v2/automation", automationRouter);
 app.use("/api/v2/batches", batchesRouter);
 app.use("/api/v2/failed-links", failedLinksRouter);
-app.use("/api/v2/browser", browserV2Router);
+app.use("/api/v2/browser", browserRouter);
 
 app.get("/api/health", (req, res) => {
   res.json({ status: "OK", sessionId: req.session.userId });

@@ -1,5 +1,5 @@
 import express from 'express';
-import puppeteerServiceV2 from '../services/puppeteerServiceV2.js';
+import puppeteerService from '../services/puppeteerService.js';
 
 const router = express.Router();
 
@@ -68,7 +68,7 @@ router.post('/retry', async (req, res) => {
 
     for (const link of linksToRetry) {
       try {
-        const page = await puppeteerServiceV2.ensureBrowserOpen();
+        const page = await puppeteerService.ensureBrowserOpen();
 
         // Navigate to link
         await page.goto(link.url, {
@@ -79,7 +79,7 @@ router.post('/retry', async (req, res) => {
         await new Promise(resolve => setTimeout(resolve, 3000));
 
         // Auto-reply
-        await puppeteerServiceV2.autoReplyOnPage(page, link.comment);
+        await puppeteerService.autoReplyOnPage(page, link.comment);
 
         results.push({
           linkId: link.linkId,

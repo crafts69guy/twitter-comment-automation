@@ -1,627 +1,703 @@
-/* eslint-disable no-unused-vars */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import {
+  ChakraProvider,
   Box,
-  Container,
-  Heading,
   Tabs,
   TabList,
   TabPanels,
   Tab,
   TabPanel,
+  Container,
+  Heading,
+  Badge,
   useToast,
-  VStack,
-  Text,
 } from '@chakra-ui/react';
-import Settings from './components/Settings';
-import PostsTable from './components/PostsTable';
 import axios from 'axios';
+import useSSE from './hooks/useSSE';
 
-// When running with Docker, use relative path for API calls (nginx will proxy to backend)
-// When running locally without Docker, use localhost:3001
+// Import tab components
+import SettingsTab from './components/tabs/SettingsTab';
+import CurrentBatchTab from './components/tabs/CurrentBatchTab';
+import FailedLinksTab from './components/tabs/FailedLinksTab';
+import OverallStatsTab from './components/tabs/OverallStatsTab';
+import ActivityLogTab from './components/tabs/ActivityLogTab';
+
+// Determine API URL based on environment
 const API_URL =
   window.location.hostname === 'localhost' &&
   window.location.port !== '80' &&
   window.location.port !== ''
-    ? 'http://localhost:3001/api' // Development mode (npm run dev)
-    : '/api'; // Production/Docker mode (nginx proxy)
+    ? 'http://localhost:3001'
+    : '';
 
-axios.defaults.withCredentials = true;
+const API_BASE = `${API_URL}/api/v2`;
+const SSE_URL = `${API_URL}/api/events/stream`;
 
 function App() {
-  const [posts, setPosts] = useState([]);
+  const toast = useToast();
+
+  // State management
   const [settings, setSettings] = useState({
-    googleSheetUrl:
-      'https://docs.google.com/spreadsheets/d/1QxgUDfj8muLeEusj4s8AM0si0PH0ldmUwTK4R09kUfo/edit?usp=sharing',
+    googleSheetUrl: '',
     aiProvider: 'gemini',
-    maxTabs: 5,
-    commentMaxLength: 50,
+    batchSize: 15,
+    batchIntervalMinutes: 20,
     additionalPrompt: '',
     twitterCookies: '',
     twitterBearerToken: '',
-    scheduledAutomation: {
-      enabled: false,
-      intervalMinutes: 20,
-      batchSize: 10,
-      startImmediately: true,
+  });
+
+  const [automationStatus, setAutomationStatus] = useState({
+    isActive: false,
+    isPaused: false,
+    currentBatch: null,
+    nextBatchTime: null,
+    stats: {
+      totalBatchesCompleted: 0,
+      totalLinksProcessed: 0,
+      totalSuccessful: 0,
+      totalFailed: 0,
+      totalBatches: 0,
+      pendingBatches: 0,
     },
   });
-  const [loading, setLoading] = useState(false);
-  const [isAutoReplying, setIsAutoReplying] = useState(false);
-  const [scheduledState, setScheduledState] = useState({
-    isActive: false,
-    nextRunTime: null,
-    timeRemaining: 0,
-    currentCycle: 0,
-    totalProcessed: 0,
-  });
+
+  const [currentBatchDetails, setCurrentBatchDetails] = useState(null);
+  const [failedLinks, setFailedLinks] = useState([]);
   const [browserStatus, setBrowserStatus] = useState({
     isOpen: false,
-    activeTabs: 0,
+    currentUrl: null,
   });
-  const toast = useToast();
 
-  const checkBrowserStatus = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_URL}/browser/status`);
-      setBrowserStatus(response.data);
-    } catch (error) {
-      console.error('Failed to check browser status:', error);
-    }
-  }, []);
+  const [countdown, setCountdown] = useState({
+    remainingMs: 0,
+    nextBatchTime: null,
+  });
 
-  const checkHealth = useCallback(async () => {
-    try {
-      const response = await axios.get(`${API_URL}/health`);
-      console.log('Server health:', response.data);
-    } catch (_error) {
-      toast({
-        title: 'Server Connection Error',
-        description: "Cannot connect to backend server. Make sure it's running on port 3001.",
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    }
-  }, [toast]);
+  const [activityLogs, setActivityLogs] = useState([]);
 
-  const loadSavedSettings = useCallback(() => {
-    const savedSettings = localStorage.getItem('twitterAutomationSettings');
-    if (savedSettings) {
-      try {
-        const parsedSettings = JSON.parse(savedSettings);
-        setSettings(parsedSettings);
-      } catch (error) {
-        console.error('Error loading saved settings:', error);
-      }
-    }
-  }, []);
-
-  const handleSettingsUpdate = useCallback(newSettings => {
-    setSettings(newSettings);
-    localStorage.setItem('twitterAutomationSettings', JSON.stringify(newSettings));
-  }, []);
-
-  const fetchPostsWithTwitterAPI = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await axios.post(`${API_URL}/automation/fetch-and-generate`, {
-        sheetUrl: settings.googleSheetUrl,
-        cookies: settings.twitterCookies,
-        bearerToken: settings.twitterBearerToken,
-        aiProvider: settings.aiProvider,
-        maxLength: settings.commentMaxLength,
-        additionalPrompt: settings.additionalPrompt,
-      });
-      setPosts(response.data.posts);
-
-      const { stats } = response.data;
-      const hasErrors = stats.twitterApiErrors > 0;
-
-      toast({
-        title: hasErrors ? 'Posts Fetched with Warnings' : 'Posts Fetched Successfully',
-        description: response.data.message,
-        status: hasErrors ? 'warning' : 'success',
-        duration: 6000,
-        isClosable: true,
-      });
-    } catch (error) {
-      toast({
-        title: 'Error Fetching Posts',
-        description: error.response?.data?.message || 'Failed to fetch posts with Twitter API',
-        status: 'error',
-        duration: 5000,
-      });
-    } finally {
-      setLoading(false);
-    }
-  }, [
-    settings.additionalPrompt,
-    settings.aiProvider,
-    settings.commentMaxLength,
-    settings.googleSheetUrl,
-    settings.twitterBearerToken,
-    settings.twitterCookies,
-    toast,
-  ]);
-
-  const autoReplyToAllPosts = useCallback(async () => {
-    const postsWithComments = posts.filter(
-      post => post.comment && post.comment.trim() !== '' && post.status !== 'replied',
-    );
-
-    if (postsWithComments.length === 0) {
-      toast({
-        title: 'No Posts to Auto-Reply',
-        description: 'All posts with comments have already been replied to.',
-        status: 'info',
-        duration: 3000,
-      });
-      return;
-    }
-
-    setLoading(true);
-    setIsAutoReplying(true);
-
-    try {
-      const postIds = postsWithComments.map(post => post.id);
-      const response = await axios.post(`${API_URL}/auto-reply/batch`, {
-        postIds,
-      });
-
-      // Refresh posts from session
-      const postsResponse = await axios.get(`${API_URL}/posts/current`);
-      setPosts(postsResponse.data.posts);
-
-      // Check if process was cancelled
-      const wasCancelled = response.data.results?.some(r => r.cancelled);
-
-      toast({
-        title: wasCancelled ? 'Auto-Reply Cancelled' : 'Auto-Reply All Complete',
-        description: wasCancelled
-          ? `Process cancelled. ${response.data.stats.successful} posts were completed before cancellation.`
-          : `${response.data.message} (${response.data.stats.successful} successful)`,
-        status: wasCancelled ? 'warning' : 'success',
-        duration: 5000,
-        isClosable: true,
-      });
-    } catch (error) {
-      toast({
-        title: 'Auto-Reply All Failed',
-        description: error.response?.data?.message || 'Failed to auto-reply to posts',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setLoading(false);
-      setIsAutoReplying(false);
-    }
-  }, [posts, toast]);
-
-  const cancelAutoReply = useCallback(async () => {
-    try {
-      await axios.post(`${API_URL}/auto-reply/cancel`);
-      toast({
-        title: 'Cancellation Requested',
-        description: 'Auto-reply process will stop after the current post completes.',
-        status: 'info',
-        duration: 3000,
-        isClosable: true,
-      });
-    } catch (error) {
-      toast({
-        title: 'Cancel Failed',
-        description: error.response?.data?.message || 'Failed to cancel auto-reply',
-        status: 'error',
-        duration: 3000,
-        isClosable: true,
-      });
-    }
-  }, [toast]);
-
-  const scheduleNextRun = useCallback(() => {
-    const intervalMs = (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
-    const nextRunTime = new Date().getTime() + intervalMs;
-
-    const newState = {
-      ...scheduledState,
-      nextRunTime,
-      timeRemaining: intervalMs,
+  // Helper function to add log entries (max 100 entries)
+  const addLog = (type, title, message, details = null) => {
+    const newLog = {
+      id: Date.now() + Math.random(), // Unique ID
+      timestamp: new Date().toLocaleString(),
+      type, // 'success', 'error', 'warning', 'info'
+      title,
+      message,
+      details,
     };
 
-    setScheduledState(newState);
-    localStorage.setItem('scheduledAutomationState', JSON.stringify(newState));
-  }, [scheduledState, settings.scheduledAutomation.intervalMinutes]);
+    setActivityLogs(prev => {
+      const updated = [newLog, ...prev];
+      // Keep only last 100 logs
+      return updated.slice(0, 100);
+    });
+  };
 
-  const runScheduledAutomation = useCallback(
-    async (isImmediateRun = false) => {
-      try {
-        const batchSize = settings.scheduledAutomation.batchSize || 10;
-
-        // Fetch current posts to work with
-        let currentPosts = posts;
-        if (currentPosts.length === 0) {
-          const fetchResponse = await axios.post(`${API_URL}/google-sheets/fetch`, {
-            sheetUrl: settings.googleSheetUrl,
-          });
-          currentPosts = fetchResponse.data.posts;
-          setPosts(currentPosts);
-        }
-
-        // Find posts that need processing (pending or have content but no comments)
-        const postsToProcess = currentPosts
-          .filter(
-            post =>
-              post.status === 'pending' ||
-              (post.content && (!post.comment || post.comment.trim() === '')),
-          )
-          .slice(0, batchSize);
-
-        if (postsToProcess.length === 0) {
-          if (!isImmediateRun) {
-            toast({
-              title: 'Scheduled Run Complete',
-              description: 'No posts require processing at this time.',
-              status: 'info',
-              duration: 3000,
-            });
-            scheduleNextRun();
-          }
-          return;
-        }
-
-        toast({
-          title: `🤖 Scheduled Automation Running`,
-          description: `Processing ${postsToProcess.length} posts...`,
-          status: 'info',
-          duration: 3000,
-        });
-
-        const postIds = postsToProcess.map(post => post.id);
-
-        // Step 1: Scrape content if needed
-        const postsNeedingScraping = postsToProcess.filter(post => !post.content);
-        if (postsNeedingScraping.length > 0) {
-          await axios.post(`${API_URL}/scraper/scrape-posts`, {
-            postIds: postsNeedingScraping.map(p => p.id),
-            maxTabs: settings.maxTabs || 5,
-          });
-        }
-
-        // Step 2: Generate comments
-        const postsNeedingComments = postsToProcess.filter(
-          post => !post.comment || post.comment.trim() === '',
-        );
-        if (postsNeedingComments.length > 0) {
-          await axios.post(`${API_URL}/ai/generate-bulk`, {
-            postIds: postsNeedingComments.map(p => p.id),
-            provider: settings.aiProvider,
-            maxLength: settings.commentMaxLength || 50,
-            additionalPrompt: settings.additionalPrompt || '',
-          });
-        }
-
-        // Step 3: Auto-reply
-        await axios.post(`${API_URL}/auto-reply/batch`, {
-          postIds,
-        });
-
-        // Refresh posts
-        const postsResponse = await axios.get(`${API_URL}/posts/current`);
-        setPosts(postsResponse.data.posts);
-
-        // Update scheduled state
-        setScheduledState(prev => ({
-          ...prev,
-          currentCycle: prev.currentCycle + 1,
-          totalProcessed: prev.totalProcessed + postsToProcess.length,
-        }));
-
-        if (!isImmediateRun) {
-          toast({
-            title: '✅ Scheduled Run Complete',
-            description: `Processed ${postsToProcess.length} posts successfully!`,
-            status: 'success',
-            duration: 5000,
-            isClosable: true,
-          });
-
-          scheduleNextRun();
-        }
-      } catch (error) {
-        if (!isImmediateRun) {
-          toast({
-            title: 'Scheduled Automation Error',
-            description: error.response?.data?.message || 'Error during scheduled run',
-            status: 'error',
-            duration: 5000,
-            isClosable: true,
-          });
-          scheduleNextRun();
-        } else {
-          // For immediate runs, just throw the error to be handled by the caller
-          throw error;
-        }
-      }
+  // SSE Event handlers
+  const sseEventHandlers = {
+    'automation:started': data => {
+      console.log('Automation started:', data);
+      addLog(
+        'success',
+        'Automation Started',
+        `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
+        data
+      );
+      toast({
+        title: 'Automation Started',
+        description: `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
+        status: 'success',
+        duration: 3000,
+      });
+      fetchAutomationStatus();
     },
-    [
-      posts,
-      scheduleNextRun,
-      settings.additionalPrompt,
-      settings.aiProvider,
-      settings.commentMaxLength,
-      settings.googleSheetUrl,
-      settings.maxTabs,
-      settings.scheduledAutomation.batchSize,
-      toast,
-    ],
-  );
 
-  const startScheduledAutomation = useCallback(async () => {
-    const shouldStartImmediately = settings.scheduledAutomation.startImmediately;
-    const intervalMs = (settings.scheduledAutomation.intervalMinutes || 20) * 60 * 1000;
-
-    if (shouldStartImmediately) {
-      // Run automation immediately first
+    'batch:started': data => {
+      console.log('Batch started:', data);
+      addLog(
+        'info',
+        `Batch ${data.batch.batchNumber} Started`,
+        `Processing ${data.batch.totalLinks} links`,
+        data.batch
+      );
       toast({
-        title: '🚀 Starting Immediate Run',
-        description: 'Running first automation cycle now, then scheduling future runs...',
+        title: `Batch ${data.batch.batchNumber} Started`,
+        description: `Processing ${data.batch.totalLinks} links`,
         status: 'info',
+        duration: 2000,
+      });
+      fetchCurrentBatch();
+    },
+
+    'link:processing': data => {
+      console.log('Processing link:', data);
+      setCurrentBatchDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentLinkIndex: data.currentIndex,
+          progress: data.percentage,
+          currentLink: data.currentLink,
+        };
+      });
+    },
+
+    'link:success': data => {
+      console.log('Link success:', data);
+      addLog('success', 'Link Processed Successfully', data.url || 'Link completed', data);
+      fetchCurrentBatch();
+    },
+
+    'link:failed': data => {
+      console.log('Link failed:', data);
+      addLog('error', 'Link Failed', data.error || 'Processing failed', data);
+      fetchCurrentBatch();
+      fetchFailedLinks();
+    },
+
+    'batch:completed': data => {
+      console.log('Batch completed:', data);
+      addLog(
+        data.batch.failedCount > 0 ? 'warning' : 'success',
+        `Batch ${data.batch.batchNumber} Completed`,
+        `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
+        data.batch
+      );
+      toast({
+        title: `Batch ${data.batch.batchNumber} Completed`,
+        description: `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
+        status: data.batch.failedCount > 0 ? 'warning' : 'success',
         duration: 3000,
       });
+      setCurrentBatchDetails(null);
+      fetchAutomationStatus();
+      fetchFailedLinks();
+    },
 
-      try {
-        // Run the automation immediately
-        await runScheduledAutomation(true);
+    'batch:scheduled': data => {
+      console.log('Batch scheduled:', data);
+      const nextTime = new Date(data.nextBatchTime).toLocaleTimeString();
+      addLog('info', 'Next Batch Scheduled', `Waiting until ${nextTime}`, data);
+      setCountdown({
+        nextBatchTime: new Date(data.nextBatchTime),
+        remainingMs: new Date(data.nextBatchTime) - Date.now(),
+      });
+    },
 
-        // After immediate run, set up the regular schedule
-        const newState = {
-          isActive: true,
-          nextRunTime: new Date().getTime() + intervalMs,
-          timeRemaining: intervalMs,
-          currentCycle: 1, // Already completed one cycle
-          totalProcessed: 0, // Will be updated by runScheduledAutomation
-        };
+    'countdown:update': data => {
+      setCountdown({
+        nextBatchTime: new Date(data.nextBatchTime),
+        remainingMs: data.remainingMs,
+      });
+    },
 
-        setScheduledState(newState);
-        localStorage.setItem('scheduledAutomationState', JSON.stringify(newState));
-
-        toast({
-          title: '✅ Immediate Run Complete + Scheduler Active',
-          description: `First cycle complete! Now running every ${settings.scheduledAutomation.intervalMinutes} minutes with ${settings.scheduledAutomation.batchSize} posts per batch`,
-          status: 'success',
-          duration: 5000,
-          isClosable: true,
-        });
-      } catch (error) {
-        toast({
-          title: 'Immediate Run Failed',
-          description: 'Failed to run immediate automation, but scheduler will still start',
-          status: 'warning',
-          duration: 5000,
-        });
-
-        // Still start the scheduler even if immediate run fails
-        const newState = {
-          isActive: true,
-          nextRunTime: new Date().getTime() + intervalMs,
-          timeRemaining: intervalMs,
-          currentCycle: 0,
-          totalProcessed: 0,
-        };
-
-        setScheduledState(newState);
-        localStorage.setItem('scheduledAutomationState', JSON.stringify(newState));
-      }
-    } else {
-      // Standard behavior - wait for first interval
-      const newState = {
-        isActive: true,
-        nextRunTime: new Date().getTime() + intervalMs,
-        timeRemaining: intervalMs,
-        currentCycle: 0,
-        totalProcessed: 0,
-      };
-
-      setScheduledState(newState);
-      localStorage.setItem('scheduledAutomationState', JSON.stringify(newState));
-
+    'automation:paused': data => {
+      console.log('Automation paused:', data);
+      addLog('info', 'Automation Paused', 'Processing paused by user', data);
       toast({
-        title: '🕐 Scheduled Automation Started',
-        description: `Will run every ${settings.scheduledAutomation.intervalMinutes} minutes with ${settings.scheduledAutomation.batchSize} posts per batch`,
+        title: 'Automation Paused',
+        status: 'info',
+        duration: 2000,
+      });
+      fetchAutomationStatus();
+    },
+
+    'automation:resumed': data => {
+      console.log('Automation resumed:', data);
+      addLog('success', 'Automation Resumed', 'Processing resumed', data);
+      toast({
+        title: 'Automation Resumed',
+        status: 'success',
+        duration: 2000,
+      });
+      fetchAutomationStatus();
+    },
+
+    'automation:stopped': data => {
+      console.log('Automation stopped:', data);
+      addLog('warning', 'Automation Stopped', 'Automation stopped by user', data);
+      toast({
+        title: 'Automation Stopped',
+        status: 'warning',
+        duration: 2000,
+      });
+      setAutomationStatus(prev => ({
+        ...prev,
+        isActive: false,
+        isPaused: false,
+        currentBatch: null,
+        nextBatchTime: null,
+      }));
+      setCurrentBatchDetails(null);
+      setCountdown({
+        remainingMs: 0,
+        nextBatchTime: null,
+      });
+    },
+
+    'automation:completed': data => {
+      console.log('Automation completed:', data);
+      addLog(
+        'success',
+        'Automation Completed',
+        `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
+        data.stats
+      );
+      toast({
+        title: 'Automation Completed',
+        description: `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
         status: 'success',
         duration: 5000,
-        isClosable: true,
       });
-    }
-  }, [
-    runScheduledAutomation,
-    settings.scheduledAutomation.batchSize,
-    settings.scheduledAutomation.intervalMinutes,
-    settings.scheduledAutomation.startImmediately,
-    toast,
-  ]);
+      fetchAutomationStatus();
+    },
 
-  const stopScheduledAutomation = useCallback(() => {
-    setScheduledState({
-      isActive: false,
-      nextRunTime: null,
-      timeRemaining: 0,
-      currentCycle: 0,
-      totalProcessed: 0,
-    });
-    localStorage.removeItem('scheduledAutomationState');
+    'batch:skipped': data => {
+      console.log('Batch skipped:', data);
+      addLog(
+        'warning',
+        'Batch Skipped',
+        `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
+        data
+      );
+      toast({
+        title: 'Batch Skipped',
+        description: `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
+        status: 'warning',
+        duration: 3000,
+      });
+    },
 
-    toast({
-      title: '⏹️ Scheduled Automation Stopped',
-      description: 'Automatic processing has been disabled',
-      status: 'info',
-      duration: 3000,
-    });
-  }, [toast]);
+    'sheets:synced': data => {
+      console.log('Sheets synced:', data);
+      addLog(
+        'success',
+        'Google Sheets Synced',
+        `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+        data
+      );
+      toast({
+        title: 'Google Sheets Synced',
+        description: `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+        status: 'success',
+        duration: 3000,
+      });
+    },
 
-  const openBrowser = useCallback(async () => {
-    setLoading(true);
+    'comments:generated': data => {
+      console.log('Comments generated:', data);
+      addLog('success', 'Comments Generated', `Generated ${data.count} AI comments`, data);
+      toast({
+        title: 'Comments Generated',
+        description: `Generated ${data.count} AI comments`,
+        status: 'success',
+        duration: 2000,
+      });
+    },
+
+    'content:fetched': data => {
+      console.log('Content fetched:', data);
+      addLog(
+        data.failedCount > 0 ? 'warning' : 'success',
+        'Tweet Content Fetched',
+        `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
+        data
+      );
+      toast({
+        title: 'Tweet Content Fetched',
+        description: `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
+        status: data.failedCount > 0 ? 'warning' : 'success',
+        duration: 3000,
+      });
+    },
+  };
+
+  // Initialize SSE connection
+  const { isConnected, reconnect } = useSSE(SSE_URL, sseEventHandlers, true);
+
+  // API functions
+  const fetchAutomationStatus = async () => {
     try {
-      const response = await axios.post(`${API_URL}/browser/open`);
-      setBrowserStatus({
-        isOpen: response.data.isOpen,
-        activeTabs: response.data.activeTabs,
+      const response = await axios.get(`${API_BASE}/automation/status`, {
+        withCredentials: true,
       });
-      toast({
-        title: '✅ Browser Opened',
-        description: response.data.message,
-        status: 'success',
-        duration: 3000,
-        isClosable: true,
-      });
+      if (response.data.success) {
+        setAutomationStatus(response.data);
+      }
     } catch (error) {
-      toast({
-        title: 'Browser Open Failed',
-        description: error.response?.data?.error || 'Failed to open browser',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    } finally {
-      setLoading(false);
+      console.error('Error fetching automation status:', error);
     }
-  }, [toast]);
+  };
 
+  const fetchCurrentBatch = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/batches/current`, {
+        withCredentials: true,
+      });
+      if (response.data.success && response.data.currentBatch) {
+        setCurrentBatchDetails(response.data.currentBatch);
+      }
+    } catch (error) {
+      console.error('Error fetching current batch:', error);
+    }
+  };
+
+  const fetchFailedLinks = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/failed-links`, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setFailedLinks(response.data.failedLinks);
+      }
+    } catch (error) {
+      console.error('Error fetching failed links:', error);
+    }
+  };
+
+  const fetchBrowserStatus = async () => {
+    try {
+      const response = await axios.get(`${API_BASE}/browser/status`, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setBrowserStatus({
+          isOpen: response.data.isOpen,
+          currentUrl: response.data.currentUrl,
+        });
+      }
+    } catch (error) {
+      console.error('Error fetching browser status:', error);
+    }
+  };
+
+  const startAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/start`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Starting',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error starting automation:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to start automation',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const stopAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/stop`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Stopped',
+          status: 'warning',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error stopping automation:', error);
+    }
+  };
+
+  const pauseAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/pause`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Paused',
+          status: 'info',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error pausing automation:', error);
+    }
+  };
+
+  const resumeAutomation = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/resume`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Resumed',
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error resuming automation:', error);
+    }
+  };
+
+  const forceNextBatch = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/force-next`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Forced Next Batch',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error forcing next batch:', error);
+    }
+  };
+
+  const syncGoogleSheets = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/automation/sync-sheets`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Sheets Synced',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error syncing sheets:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to sync sheets',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const updateSettings = async newSettings => {
+    try {
+      const response = await axios.post(`${API_BASE}/automation/update-settings`, newSettings, {
+        withCredentials: true,
+      });
+      if (response.data.success) {
+        setSettings(response.data.settings);
+        toast({
+          title: 'Settings Updated',
+          status: 'success',
+          duration: 1000,
+        });
+      }
+    } catch (error) {
+      console.error('Error updating settings:', error);
+    }
+  };
+
+  const openBrowser = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/browser/open`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        setBrowserStatus({ isOpen: true, currentUrl: null });
+        toast({
+          title: 'Browser Opened',
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error opening browser:', error);
+      toast({
+        title: 'Error',
+        description: 'Failed to open browser',
+        status: 'error',
+        duration: 3000,
+      });
+    }
+  };
+
+  const closeBrowser = async () => {
+    try {
+      const response = await axios.post(
+        `${API_BASE}/browser/close`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        setBrowserStatus({ isOpen: false, currentUrl: null });
+        toast({
+          title: 'Browser Closed',
+          status: 'info',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error closing browser:', error);
+    }
+  };
+
+  // Initialize on mount
   useEffect(() => {
-    checkHealth();
-    loadSavedSettings();
-    checkBrowserStatus();
+    fetchAutomationStatus();
+    fetchFailedLinks();
+    fetchBrowserStatus();
 
-    // Set up interval to check browser status every 30 seconds
-    const browserStatusInterval = setInterval(() => {
-      checkBrowserStatus();
+    // Poll browser status every 10 seconds
+    const interval = setInterval(() => {
+      fetchBrowserStatus();
     }, 10000);
 
-    return () => {
-      clearInterval(browserStatusInterval);
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => clearInterval(interval);
   }, []);
-
-  // Load scheduled automation state from localStorage
-  useEffect(() => {
-    const savedScheduledState = localStorage.getItem('scheduledAutomationState');
-    if (savedScheduledState) {
-      try {
-        const parsed = JSON.parse(savedScheduledState);
-        if (parsed.isActive && parsed.nextRunTime > new Date().getTime()) {
-          setScheduledState(parsed);
-        }
-      } catch (error) {
-        console.error('Error loading scheduled state:', error);
-      }
-    }
-  }, []);
-
-  // Timer effect for scheduled automation
-  useEffect(() => {
-    let interval;
-
-    if (scheduledState.isActive && scheduledState.nextRunTime) {
-      interval = setInterval(() => {
-        const now = new Date().getTime();
-        const timeLeft = scheduledState.nextRunTime - now;
-
-        if (timeLeft <= 0) {
-          // Time to run automation
-          runScheduledAutomation();
-        } else {
-          // Update countdown
-          setScheduledState(prev => ({
-            ...prev,
-            timeRemaining: timeLeft,
-          }));
-        }
-      }, 1000);
-    }
-
-    return () => {
-      if (interval) clearInterval(interval);
-    };
-  }, [runScheduledAutomation, scheduledState.isActive, scheduledState.nextRunTime]);
 
   return (
-    <Box bg="gray.50" minH="100vh" minW="100vw">
-      <Container width="100%" maxW="100%" py={8}>
-        <VStack spacing={8} align="stretch">
-          <Box textAlign="center" mb={6}>
-            <Heading size="2xl" mb={4} color="blue.600" fontWeight="bold">
+    <ChakraProvider>
+      <Box minH="100vh" minW="100vw" bg="gray.50" py={8}>
+        <Container maxW="container.xl">
+          {/* Header */}
+          <Box mb={8} textAlign="center">
+            <Heading size="xl" mb={2}>
               Twitter Comment Automation
             </Heading>
-            <Text fontSize="lg" color="gray.600">
-              Automate Twitter comment generation with AI-powered responses
-            </Text>
+            <Box>
+              <Badge colorScheme={isConnected ? 'green' : 'red'} mr={2}>
+                {isConnected ? 'Connected' : 'Disconnected'}
+              </Badge>
+              <Badge colorScheme={automationStatus.isActive ? 'blue' : 'gray'}>
+                {automationStatus.isActive
+                  ? automationStatus.isPaused
+                    ? 'Paused'
+                    : 'Active'
+                  : 'Inactive'}
+              </Badge>
+            </Box>
           </Box>
 
-          <Tabs colorScheme="blue" variant="enclosed" bg="white" rounded="xl" shadow="lg" p={6}>
-            <TabList mb={6}>
-              <Tab
-                fontSize="lg"
-                fontWeight="medium"
-                _selected={{
-                  color: 'blue.600',
-                  borderColor: 'blue.500',
-                  bg: 'blue.50',
-                }}
-                px={8}
-                py={4}
-                mr={2}
-              >
-                ⚙️ Settings
+          {/* Tabs */}
+          <Tabs variant="enclosed" colorScheme="blue">
+            <TabList>
+              <Tab>Settings</Tab>
+              <Tab>
+                Current Batch
+                {currentBatchDetails && (
+                  <Badge ml={2} colorScheme="blue">
+                    Processing
+                  </Badge>
+                )}
               </Tab>
-              <Tab
-                fontSize="lg"
-                fontWeight="medium"
-                _selected={{
-                  color: 'blue.600',
-                  borderColor: 'blue.500',
-                  bg: 'blue.50',
-                }}
-                px={8}
-                py={4}
-              >
-                📝 Posts Management
+              <Tab>
+                Failed Links
+                {failedLinks.length > 0 && (
+                  <Badge ml={2} colorScheme="red">
+                    {failedLinks.length}
+                  </Badge>
+                )}
+              </Tab>
+              <Tab>Overall Stats</Tab>
+              <Tab>
+                Activity Log
+                {activityLogs.length > 0 && (
+                  <Badge ml={2} colorScheme="purple">
+                    {activityLogs.length}
+                  </Badge>
+                )}
               </Tab>
             </TabList>
 
             <TabPanels>
-              <TabPanel px={0}>
-                <Settings
+              {/* Settings Tab */}
+              <TabPanel>
+                <SettingsTab
                   settings={settings}
-                  onUpdate={handleSettingsUpdate}
-                  scheduledState={scheduledState}
-                  onStartScheduled={startScheduledAutomation}
-                  onStopScheduled={stopScheduledAutomation}
+                  onUpdateSettings={updateSettings}
+                  onSyncSheets={syncGoogleSheets}
                 />
               </TabPanel>
-              <TabPanel px={0}>
-                <PostsTable
-                  posts={posts}
-                  onFetchPostsWithTwitterAPI={fetchPostsWithTwitterAPI}
-                  onAutoReplyAll={autoReplyToAllPosts}
-                  onCancelAutoReply={cancelAutoReply}
-                  loading={loading}
-                  isAutoReplying={isAutoReplying}
-                  hasSettings={!!settings.googleSheetUrl}
-                  scheduledState={scheduledState}
-                  onStartScheduled={startScheduledAutomation}
-                  onStopScheduled={stopScheduledAutomation}
+
+              {/* Current Batch Tab */}
+              <TabPanel>
+                <CurrentBatchTab
+                  automationStatus={automationStatus}
+                  currentBatchDetails={currentBatchDetails}
                   browserStatus={browserStatus}
+                  countdown={countdown}
+                  onStart={startAutomation}
+                  onStop={stopAutomation}
+                  onPause={pauseAutomation}
+                  onResume={resumeAutomation}
+                  onForceNext={forceNextBatch}
                   onOpenBrowser={openBrowser}
+                  onCloseBrowser={closeBrowser}
+                />
+              </TabPanel>
+
+              {/* Failed Links Tab */}
+              <TabPanel>
+                <FailedLinksTab failedLinks={failedLinks} onRefresh={fetchFailedLinks} />
+              </TabPanel>
+
+              {/* Overall Stats Tab */}
+              <TabPanel>
+                <OverallStatsTab stats={automationStatus.stats} />
+              </TabPanel>
+
+              {/* Activity Log Tab */}
+              <TabPanel>
+                <ActivityLogTab
+                  logs={activityLogs}
+                  onClearLogs={() => setActivityLogs([])}
                 />
               </TabPanel>
             </TabPanels>
           </Tabs>
-        </VStack>
-      </Container>
-    </Box>
+        </Container>
+      </Box>
+    </ChakraProvider>
   );
 }
 

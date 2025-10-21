@@ -1,48 +1,85 @@
-import express from "express";
-import puppeteerService from "../services/puppeteerService.js";
+import express from 'express';
+import puppeteerService from '../services/puppeteerService.js';
 
 const router = express.Router();
 
-// Get browser status
-router.get("/status", async (req, res) => {
+/**
+ * GET /api/browser/status
+ * Get browser connection status
+ */
+router.get('/status', async (req, res) => {
   try {
     const status = await puppeteerService.getBrowserStatus();
-    res.json(status);
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
 
-// Manually open browser
-router.post("/open", async (req, res) => {
-  try {
-    await puppeteerService.initialize();
-    const status = await puppeteerService.getBrowserStatus();
+    // Update session browser status
+    req.userSession.browser.isOpen = status.isOpen;
+    req.userSession.browser.currentPageUrl = status.currentUrl;
+    req.userSession.browser.lastActivityAt = new Date();
+
     res.json({
       success: true,
-      message: "Browser opened successfully",
       ...status
     });
   } catch (error) {
+    console.error('Error getting browser status:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      message: error.message,
+      isOpen: false
     });
   }
 });
 
-// Close browser
-router.post("/close", async (req, res) => {
+/**
+ * POST /api/browser/open
+ * Initialize browser
+ */
+router.post('/open', async (req, res) => {
   try {
-    await puppeteerService.close();
+    await puppeteerService.initialize();
+
+    const status = await puppeteerService.getBrowserStatus();
+
+    // Update session
+    req.userSession.browser.isOpen = true;
+    req.userSession.browser.lastActivityAt = new Date();
+
     res.json({
       success: true,
-      message: "Browser closed successfully"
+      message: 'Browser opened successfully',
+      ...status
     });
   } catch (error) {
+    console.error('Error opening browser:', error);
     res.status(500).json({
       success: false,
-      error: error.message
+      message: error.message
+    });
+  }
+});
+
+/**
+ * POST /api/browser/close
+ * Close browser
+ */
+router.post('/close', async (req, res) => {
+  try {
+    await puppeteerService.closeBrowser();
+
+    // Update session
+    req.userSession.browser.isOpen = false;
+    req.userSession.browser.currentPageUrl = null;
+    req.userSession.browser.lastActivityAt = new Date();
+
+    res.json({
+      success: true,
+      message: 'Browser closed successfully'
+    });
+  } catch (error) {
+    console.error('Error closing browser:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message
     });
   }
 });
