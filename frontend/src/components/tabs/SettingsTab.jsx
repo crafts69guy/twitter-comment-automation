@@ -78,7 +78,11 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
               placeholder="https://docs.google.com/spreadsheets/d/..."
             />
             <Text fontSize="sm" color="gray.500" mt={1}>
-              Column A: Twitter URLs | Column B: Optional pre-filled content
+              Column A: Twitter URLs | Column B: Content (fetched automatically via Twitter API)
+            </Text>
+            <Text fontSize="xs" color="blue.600" mt={1}>
+              💡 Column B content is now automatically fetched using Twitter API. You don't need to
+              fill it manually.
             </Text>
           </FormControl>
           <Button
@@ -184,34 +188,53 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets }) {
 
         <Divider />
 
-        {/* Twitter API Configuration (Optional) */}
+        {/* Twitter API Configuration (Required) */}
         <Box>
-          <Heading size="sm" mb={4}>
-            Twitter API (Optional)
+          <Heading size="sm" mb={2}>
+            Twitter API Configuration
           </Heading>
-          <Text fontSize="sm" color="gray.600" mb={4}>
-            These are optional. If not provided, Puppeteer will scrape content from Twitter pages.
-          </Text>
+          <Box
+            bg="orange.50"
+            border="1px solid"
+            borderColor="orange.200"
+            borderRadius="md"
+            p={3}
+            mb={4}
+          >
+            <Text fontSize="sm" color="orange.800" fontWeight="medium">
+              ⚠️ Required for automation
+            </Text>
+            <Text fontSize="sm" color="orange.700" mt={1}>
+              Twitter API credentials are required to fetch tweet content. Without them, links
+              cannot be processed and will be skipped.
+            </Text>
+          </Box>
 
           <VStack spacing={4} align="stretch">
-            <FormControl>
+            <FormControl isRequired>
               <FormLabel>Bearer Token</FormLabel>
               <Input
                 type="password"
                 value={localSettings.twitterBearerToken}
                 onChange={e => handleChange('twitterBearerToken', e.target.value)}
-                placeholder="Optional: Twitter API Bearer token"
+                placeholder="Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D..."
               />
+              <Text fontSize="xs" color="gray.600" mt={1}>
+                Get from Twitter/X web app network requests (header: Authorization)
+              </Text>
             </FormControl>
 
-            <FormControl>
+            <FormControl isRequired>
               <FormLabel>Cookies (JSON or string)</FormLabel>
               <Textarea
                 value={localSettings.twitterCookies}
                 onChange={e => handleChange('twitterCookies', e.target.value)}
-                placeholder='Optional: Twitter cookies {"auth_token": "...", "ct0": "..."}'
+                placeholder='{"auth_token": "your_token", "ct0": "your_csrf_token"}'
                 rows={3}
               />
+              <Text fontSize="xs" color="gray.600" mt={1}>
+                Export cookies from Twitter/X using browser extension (Cookie Editor, EditThisCookie)
+              </Text>
             </FormControl>
           </VStack>
         </Box>

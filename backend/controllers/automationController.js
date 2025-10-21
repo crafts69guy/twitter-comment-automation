@@ -132,6 +132,10 @@ class AutomationController {
   /**
    * Fetch tweet content for all links that don't have content
    */
+  /**
+   * Fetch tweet content for all links that don't have content
+   * This is REQUIRED - links without content will be skipped
+   */
   async fetchTweetContentForAll() {
     const linksWithoutContent = this.session.allLinks.filter(
       link => !link.content || link.content.trim() === '',
@@ -148,7 +152,35 @@ class AutomationController {
 
     const { twitterCookies, twitterBearerToken } = this.session.settings;
 
-    // Fetch content using Twitter API (credentials required)
+    // Check if Twitter API credentials are provided
+    const hasTwitterApi = twitterCookies && twitterBearerToken;
+
+    if (!hasTwitterApi) {
+      const errorMsg =
+        'Twitter API credentials are required to fetch tweet content. ' +
+        'Please configure Twitter Cookies and Bearer Token in Settings.';
+      console.error(`[AutomationController] ${errorMsg}`);
+      
+      // Emit error to frontend
+      this.emitSSE(this.userId, 'error', {
+        message: 'Twitter API credentials missing',
+        details: errorMsg,
+      });
+
+      // Don't throw error, just skip these links
+      console.log(
+        `[AutomationController] Skipping ${linksWithoutContent.length} links without content`,
+      );
+
+      // Mark these links as having content error
+      linksWithoutContent.forEach(link => {
+        link.contentError = 'Twitter API credentials not configured';
+      });
+
+      return;
+    }
+
+    // Fetch content using Twitter API
     const contentResults = await fetchTweetContentBatch(
       linksWithoutContent,
       twitterCookies,
@@ -186,10 +218,19 @@ class AutomationController {
       failedCount,
       totalLinks: linksWithoutContent.length,
     });
+
+    // If all failed, emit warning
+    if (failedCount > 0 && successCount === 0) {
+      this.emitSSE(this.userId, 'error', {
+        message: 'Failed to fetch any tweet content',
+        details: 'Check your Twitter API credentials and try again',
+      });
+    }
   }
 
   /**
    * Generate AI comments for all links that don't have them
+   * ONLY generates comments for links that have valid content
    */
   async generateCommentsForAll() {
     const linksWithoutComments = this.session.allLinks.filter(link => !link.comment);
@@ -199,8 +240,54 @@ class AutomationController {
       return;
     }
 
+    // Filter out links without content or with content errors
+    const linksReadyForComments = linksWithoutComments.filter(
+      link => link.content && link.content.trim() !== '' && !link.contentError,
+    );
+
+    const linksWithoutContent = linksWithoutComments.filter(
+      link => !link.content || link.content.trim() === '' || link.contentError,
+    );
+
+    if (linksWithoutContent.length > 0) {
+      console.warn(
+        `[AutomationController] Skipping ${linksWithoutContent.length} links without valid content`,
+      );
+
+      // Emit warning to frontend
+      this.emitSSE(this.userId, 'warning', {
+        message: `${linksWithoutContent.length} links skipped - no content available`,
+        details:
+          'These links will not be processed. Configure Twitter API credentials to fetch tweet content.',
+      });
+
+      // Remove these links from allLinks (they will not be processed)
+      this.session.allLinks = this.session.allLinks.filter(
+        link => !linksWithoutContent.includes(link),
+      );
+
+      // Add to failed links
+      linksWithoutContent.forEach(link => {
+        this.session.failedLinks.push({
+          linkId: link.id,
+          url: link.url,
+          comment: '',
+          content: link.content || '',
+          batchNumber: 0,
+          error: link.contentError || 'No content available - Twitter API not configured',
+          failedAt: new Date(),
+          canRetry: false, // Cannot retry without fixing API credentials
+        });
+      });
+    }
+
+    if (linksReadyForComments.length === 0) {
+      console.log('[AutomationController] No links with valid content for comment generation');
+      return;
+    }
+
     console.log(
-      `[AutomationController] Generating comments for ${linksWithoutComments.length} links...`,
+      `[AutomationController] Generating comments for ${linksReadyForComments.length} links...`,
     );
 
     const { aiProvider, additionalPrompt } = this.session.settings;
@@ -227,8 +314,8 @@ class AutomationController {
       );
     }
 
-    // Use bulk generation for efficiency
-    const posts = linksWithoutComments.map(link => ({
+    // Use bulk generation for efficiency - only for links with valid content
+    const posts = linksReadyForComments.map(link => ({
       id: link.id,
       content: link.content,
     }));

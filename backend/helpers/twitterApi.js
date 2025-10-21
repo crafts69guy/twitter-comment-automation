@@ -159,7 +159,8 @@ export async function fetchTweetData(tweetId, cookies, bearerToken) {
 
 /**
  * Fetch tweet content for multiple links (batch)
- * Requires Twitter API credentials - no fallback to scraping
+ * Optional: Only fetches if Twitter API credentials provided
+ * If credentials not provided, returns empty results (links will use content from Google Sheets)
  */
 export async function fetchTweetContentBatch(links, cookies, bearerToken) {
   const results = [];
@@ -168,8 +169,10 @@ export async function fetchTweetContentBatch(links, cookies, bearerToken) {
   const hasTwitterApi = cookies && bearerToken;
 
   if (!hasTwitterApi) {
-    console.error('[Twitter API] Credentials required but not provided');
-    throw new Error('Twitter API credentials (cookies and bearerToken) are required');
+    console.log('[Twitter API] No credentials provided - skipping tweet content fetch');
+    console.log('[Twitter API] Will use content from Google Sheets Column B if available');
+    // Return empty results - links will keep their existing content
+    return results;
   }
 
   console.log('[Twitter API] Fetching tweet content via Twitter API...');

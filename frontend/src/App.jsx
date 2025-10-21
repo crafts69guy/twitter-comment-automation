@@ -311,6 +311,30 @@ function App() {
         duration: 3000,
       });
     },
+
+    error: data => {
+      console.error('Error:', data);
+      addLog('error', data.message || 'Error', data.details || '', data);
+      toast({
+        title: data.message || 'Error',
+        description: data.details || 'An error occurred',
+        status: 'error',
+        duration: 5000,
+        isClosable: true,
+      });
+    },
+
+    warning: data => {
+      console.warn('Warning:', data);
+      addLog('warning', data.message || 'Warning', data.details || '', data);
+      toast({
+        title: data.message || 'Warning',
+        description: data.details || '',
+        status: 'warning',
+        duration: 4000,
+        isClosable: true,
+      });
+    },
   };
 
   // Initialize SSE connection

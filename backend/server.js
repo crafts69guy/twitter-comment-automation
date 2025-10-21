@@ -3,9 +3,8 @@ import session from "express-session";
 import cors from "cors";
 import { v4 as uuidv4 } from "uuid";
 import dotenv from "dotenv";
-import googleSheetsRouter from "./routes/googleSheets.js";
-import aiRouter from "./routes/ai.js";
-import postsRouter from "./routes/posts.js";
+
+// V2 Routes (only routes currently in use)
 import automationRouter from "./routes/automation.js";
 import batchesRouter from "./routes/batches.js";
 import failedLinksRouter from "./routes/failedLinks.js";
@@ -142,10 +141,7 @@ export const emitSSE = (userId, eventType, data) => {
 app.set("sessions", sessions);
 app.set("emitSSE", emitSSE);
 
-// Routes
-app.use("/api/google-sheets", googleSheetsRouter);
-app.use("/api/ai", aiRouter);
-app.use("/api/posts", postsRouter);
+// V2 API Routes
 app.use("/api/v2/automation", automationRouter);
 app.use("/api/v2/batches", batchesRouter);
 app.use("/api/v2/failed-links", failedLinksRouter);

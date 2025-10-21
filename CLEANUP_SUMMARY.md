@@ -13,11 +13,14 @@ Cleaned up the project by removing old V1 (legacy) files and consolidating V2 as
 
 ## Files Removed
 
-### Backend (5 files)
+### Backend (8 files)
 - ❌ `routes/automation.js` (old V1 automation)
 - ❌ `routes/browser.js` (old V1 browser control)
 - ❌ `routes/autoReply.js` (old V1 auto-reply)
 - ❌ `routes/scraper.js` (old V1 scraper)
+- ❌ `routes/googleSheets.js` (V1 - logic moved to controller)
+- ❌ `routes/ai.js` (V1 - logic moved to controller)
+- ❌ `routes/posts.js` (V1 - replaced by allLinks)
 - ❌ `services/puppeteerService.js` (old V1 puppeteer)
 
 ### Frontend (4 files)
@@ -31,7 +34,7 @@ Cleaned up the project by removing old V1 (legacy) files and consolidating V2 as
 - ❌ `CONTENT_FETCH_FIX.md` (temporary fix log)
 - ❌ `STOP_FIX.md` (temporary fix log)
 
-**Total removed:** 12 files
+**Total removed:** 15 files (+3 more from second cleanup)
 
 ---
 
@@ -68,13 +71,10 @@ Cleaned up the project by removing old V1 (legacy) files and consolidating V2 as
 ### Backend Routes
 ```
 routes/
-├── ai.js              ✓ (kept - still used)
 ├── automation.js      ✓ (V2 renamed)
 ├── batches.js         ✓ (V2)
 ├── browser.js         ✓ (V2 renamed)
-├── failedLinks.js     ✓ (V2)
-├── googleSheets.js    ✓ (kept - still used)
-└── posts.js           ✓ (kept - still used)
+└── failedLinks.js     ✓ (V2)
 ```
 
 ### Backend Services
