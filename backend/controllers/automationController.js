@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { google } from 'googleapis';
 import { generateBulkComments } from '../services/aiService.js';
+import { fetchTweetContentBatch } from '../helpers/twitterApi.js';
 
 class AutomationController {
   constructor(session, puppeteerService, emitSSE, userId) {
@@ -24,13 +25,16 @@ class AutomationController {
         await this.syncGoogleSheets();
       }
 
-      // Step 2: Generate AI comments for links that don't have them
+      // Step 2: Fetch tweet content for links that don't have content
+      await this.fetchTweetContentForAll();
+
+      // Step 3: Generate AI comments for links that don't have them
       await this.generateCommentsForAll();
 
-      // Step 3: Divide into batches
+      // Step 4: Divide into batches
       this.createBatches();
 
-      // Step 4: Start processing first batch
+      // Step 5: Start processing first batch
       this.session.automation.isActive = true;
       this.emitSSE(this.userId, 'automation:started', {
         totalBatches: this.session.batches.length,
@@ -123,6 +127,66 @@ class AutomationController {
     });
 
     return uniqueNewLinks;
+  }
+
+  /**
+   * Fetch tweet content for all links that don't have content
+   */
+  async fetchTweetContentForAll() {
+    const linksWithoutContent = this.session.allLinks.filter(
+      link => !link.content || link.content.trim() === '',
+    );
+
+    if (linksWithoutContent.length === 0) {
+      console.log('[AutomationController] All links already have content');
+      return;
+    }
+
+    console.log(
+      `[AutomationController] Fetching tweet content for ${linksWithoutContent.length} links...`,
+    );
+
+    const { twitterCookies, twitterBearerToken } = this.session.settings;
+
+    // Fetch content using Twitter API or Puppeteer fallback
+    const contentResults = await fetchTweetContentBatch(
+      linksWithoutContent,
+      twitterCookies,
+      twitterBearerToken,
+      this.puppeteer,
+    );
+
+    // Update links with fetched content
+    let successCount = 0;
+    let failedCount = 0;
+
+    contentResults.forEach(result => {
+      const link = this.session.allLinks.find(l => l.id === result.linkId);
+      if (link) {
+        if (result.success) {
+          link.content = result.content;
+          link.author = result.author;
+          link.authorName = result.authorName;
+          successCount++;
+        } else {
+          link.contentError = result.error;
+          failedCount++;
+          console.error(
+            `[AutomationController] Failed to fetch content for ${link.url}: ${result.error}`,
+          );
+        }
+      }
+    });
+
+    console.log(
+      `[AutomationController] Fetched content: ${successCount} success, ${failedCount} failed`,
+    );
+
+    this.emitSSE(this.userId, 'content:fetched', {
+      successCount,
+      failedCount,
+      totalLinks: linksWithoutContent.length,
+    });
   }
 
   /**

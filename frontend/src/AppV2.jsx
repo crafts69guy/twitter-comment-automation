@@ -230,6 +230,16 @@ function AppV2() {
         duration: 2000,
       });
     },
+
+    'content:fetched': data => {
+      console.log('Content fetched:', data);
+      toast({
+        title: 'Tweet Content Fetched',
+        description: `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
+        status: data.failedCount > 0 ? 'warning' : 'success',
+        duration: 3000,
+      });
+    },
   };
 
   // Initialize SSE connection
