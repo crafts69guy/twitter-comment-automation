@@ -20,6 +20,7 @@ import SettingsTab from './components/tabs/SettingsTab';
 import CurrentBatchTab from './components/tabs/CurrentBatchTab';
 import FailedLinksTab from './components/tabs/FailedLinksTab';
 import OverallStatsTab from './components/tabs/OverallStatsTab';
+import ActivityLogTab from './components/tabs/ActivityLogTab';
 
 // Determine API URL based on environment
 const API_URL =
@@ -73,10 +74,36 @@ function AppV2() {
     nextBatchTime: null,
   });
 
+  const [activityLogs, setActivityLogs] = useState([]);
+
+  // Helper function to add log entries (max 100 entries)
+  const addLog = (type, title, message, details = null) => {
+    const newLog = {
+      id: Date.now() + Math.random(), // Unique ID
+      timestamp: new Date().toLocaleString(),
+      type, // 'success', 'error', 'warning', 'info'
+      title,
+      message,
+      details,
+    };
+
+    setActivityLogs(prev => {
+      const updated = [newLog, ...prev];
+      // Keep only last 100 logs
+      return updated.slice(0, 100);
+    });
+  };
+
   // SSE Event handlers
   const sseEventHandlers = {
     'automation:started': data => {
       console.log('Automation started:', data);
+      addLog(
+        'success',
+        'Automation Started',
+        `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
+        data
+      );
       toast({
         title: 'Automation Started',
         description: `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
@@ -88,6 +115,12 @@ function AppV2() {
 
     'batch:started': data => {
       console.log('Batch started:', data);
+      addLog(
+        'info',
+        `Batch ${data.batch.batchNumber} Started`,
+        `Processing ${data.batch.totalLinks} links`,
+        data.batch
+      );
       toast({
         title: `Batch ${data.batch.batchNumber} Started`,
         description: `Processing ${data.batch.totalLinks} links`,
@@ -112,17 +145,25 @@ function AppV2() {
 
     'link:success': data => {
       console.log('Link success:', data);
+      addLog('success', 'Link Processed Successfully', data.url || 'Link completed', data);
       fetchCurrentBatch();
     },
 
     'link:failed': data => {
       console.log('Link failed:', data);
+      addLog('error', 'Link Failed', data.error || 'Processing failed', data);
       fetchCurrentBatch();
       fetchFailedLinks();
     },
 
     'batch:completed': data => {
       console.log('Batch completed:', data);
+      addLog(
+        data.batch.failedCount > 0 ? 'warning' : 'success',
+        `Batch ${data.batch.batchNumber} Completed`,
+        `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
+        data.batch
+      );
       toast({
         title: `Batch ${data.batch.batchNumber} Completed`,
         description: `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
@@ -136,6 +177,8 @@ function AppV2() {
 
     'batch:scheduled': data => {
       console.log('Batch scheduled:', data);
+      const nextTime = new Date(data.nextBatchTime).toLocaleTimeString();
+      addLog('info', 'Next Batch Scheduled', `Waiting until ${nextTime}`, data);
       setCountdown({
         nextBatchTime: new Date(data.nextBatchTime),
         remainingMs: new Date(data.nextBatchTime) - Date.now(),
@@ -151,6 +194,7 @@ function AppV2() {
 
     'automation:paused': data => {
       console.log('Automation paused:', data);
+      addLog('info', 'Automation Paused', 'Processing paused by user', data);
       toast({
         title: 'Automation Paused',
         status: 'info',
@@ -161,6 +205,7 @@ function AppV2() {
 
     'automation:resumed': data => {
       console.log('Automation resumed:', data);
+      addLog('success', 'Automation Resumed', 'Processing resumed', data);
       toast({
         title: 'Automation Resumed',
         status: 'success',
@@ -171,6 +216,7 @@ function AppV2() {
 
     'automation:stopped': data => {
       console.log('Automation stopped:', data);
+      addLog('warning', 'Automation Stopped', 'Automation stopped by user', data);
       toast({
         title: 'Automation Stopped',
         status: 'warning',
@@ -192,6 +238,12 @@ function AppV2() {
 
     'automation:completed': data => {
       console.log('Automation completed:', data);
+      addLog(
+        'success',
+        'Automation Completed',
+        `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
+        data.stats
+      );
       toast({
         title: 'Automation Completed',
         description: `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
@@ -203,6 +255,12 @@ function AppV2() {
 
     'batch:skipped': data => {
       console.log('Batch skipped:', data);
+      addLog(
+        'warning',
+        'Batch Skipped',
+        `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
+        data
+      );
       toast({
         title: 'Batch Skipped',
         description: `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
@@ -213,6 +271,12 @@ function AppV2() {
 
     'sheets:synced': data => {
       console.log('Sheets synced:', data);
+      addLog(
+        'success',
+        'Google Sheets Synced',
+        `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+        data
+      );
       toast({
         title: 'Google Sheets Synced',
         description: `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
@@ -223,6 +287,7 @@ function AppV2() {
 
     'comments:generated': data => {
       console.log('Comments generated:', data);
+      addLog('success', 'Comments Generated', `Generated ${data.count} AI comments`, data);
       toast({
         title: 'Comments Generated',
         description: `Generated ${data.count} AI comments`,
@@ -233,6 +298,12 @@ function AppV2() {
 
     'content:fetched': data => {
       console.log('Content fetched:', data);
+      addLog(
+        data.failedCount > 0 ? 'warning' : 'success',
+        'Tweet Content Fetched',
+        `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
+        data
+      );
       toast({
         title: 'Tweet Content Fetched',
         description: `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
@@ -568,6 +639,14 @@ function AppV2() {
                 )}
               </Tab>
               <Tab>Overall Stats</Tab>
+              <Tab>
+                Activity Log
+                {activityLogs.length > 0 && (
+                  <Badge ml={2} colorScheme="purple">
+                    {activityLogs.length}
+                  </Badge>
+                )}
+              </Tab>
             </TabList>
 
             <TabPanels>
@@ -605,6 +684,14 @@ function AppV2() {
               {/* Overall Stats Tab */}
               <TabPanel>
                 <OverallStatsTab stats={automationStatus.stats} />
+              </TabPanel>
+
+              {/* Activity Log Tab */}
+              <TabPanel>
+                <ActivityLogTab
+                  logs={activityLogs}
+                  onClearLogs={() => setActivityLogs([])}
+                />
               </TabPanel>
             </TabPanels>
           </Tabs>

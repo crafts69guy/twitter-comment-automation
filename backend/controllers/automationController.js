@@ -148,12 +148,11 @@ class AutomationController {
 
     const { twitterCookies, twitterBearerToken } = this.session.settings;
 
-    // Fetch content using Twitter API or Puppeteer fallback
+    // Fetch content using Twitter API (credentials required)
     const contentResults = await fetchTweetContentBatch(
       linksWithoutContent,
       twitterCookies,
       twitterBearerToken,
-      this.puppeteer,
     );
 
     // Update links with fetched content

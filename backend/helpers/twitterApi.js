@@ -159,73 +159,53 @@ export async function fetchTweetData(tweetId, cookies, bearerToken) {
 
 /**
  * Fetch tweet content for multiple links (batch)
- * Falls back to Puppeteer scraping if Twitter API credentials not available
+ * Requires Twitter API credentials - no fallback to scraping
  */
-export async function fetchTweetContentBatch(links, cookies, bearerToken, puppeteerService) {
+export async function fetchTweetContentBatch(links, cookies, bearerToken) {
   const results = [];
 
   // Check if Twitter API credentials available
   const hasTwitterApi = cookies && bearerToken;
 
-  if (hasTwitterApi) {
-    console.log('[Twitter API] Fetching tweet content via Twitter API...');
+  if (!hasTwitterApi) {
+    console.error('[Twitter API] Credentials required but not provided');
+    throw new Error('Twitter API credentials (cookies and bearerToken) are required');
+  }
 
-    for (const link of links) {
-      const tweetId = extractTweetId(link.url);
+  console.log('[Twitter API] Fetching tweet content via Twitter API...');
 
-      if (!tweetId) {
-        results.push({
-          linkId: link.id,
-          success: false,
-          error: 'Invalid Twitter URL',
-        });
-        continue;
-      }
+  for (const link of links) {
+    const tweetId = extractTweetId(link.url);
 
-      const tweetData = await fetchTweetData(tweetId, cookies, bearerToken);
-
-      if (tweetData.success) {
-        results.push({
-          linkId: link.id,
-          success: true,
-          content: tweetData.text,
-          author: tweetData.author,
-          authorName: tweetData.authorName,
-        });
-      } else {
-        results.push({
-          linkId: link.id,
-          success: false,
-          error: tweetData.error,
-        });
-      }
-
-      // Small delay to avoid rate limiting
-      await new Promise(resolve => setTimeout(resolve, 500));
+    if (!tweetId) {
+      results.push({
+        linkId: link.id,
+        success: false,
+        error: 'Invalid Twitter URL',
+      });
+      continue;
     }
-  } else {
-    console.log('[Puppeteer] Twitter API credentials not available, using Puppeteer scraping...');
 
-    // Fallback to Puppeteer scraping
-    const urls = links.map(l => l.url);
-    const scrapeResults = await puppeteerService.scrapeBatch(urls, 5);
+    const tweetData = await fetchTweetData(tweetId, cookies, bearerToken);
 
-    scrapeResults.forEach((result, index) => {
-      if (result.success) {
-        results.push({
-          linkId: links[index].id,
-          success: true,
-          content: result.text || '',
-          author: result.author || 'unknown',
-        });
-      } else {
-        results.push({
-          linkId: links[index].id,
-          success: false,
-          error: result.error || 'Scraping failed',
-        });
-      }
-    });
+    if (tweetData.success) {
+      results.push({
+        linkId: link.id,
+        success: true,
+        content: tweetData.text,
+        author: tweetData.author,
+        authorName: tweetData.authorName,
+      });
+    } else {
+      results.push({
+        linkId: link.id,
+        success: false,
+        error: tweetData.error,
+      });
+    }
+
+    // Small delay to avoid rate limiting
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   return results;
