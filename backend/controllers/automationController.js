@@ -1041,6 +1041,161 @@ class AutomationController {
   }
 
   /**
+   * Force retry immediately (skip countdown)
+   */
+  async forceRetry() {
+    // Check if there's a retry pending
+    if (!this.session.automation.retryPending) {
+      throw new Error('No retry scheduled');
+    }
+
+    const batchNumber = this.session.automation.retryBatchNumber;
+    console.log(`[AutomationController] Force retry requested for batch ${batchNumber}`);
+
+    // Find the batch with retry scheduled (search in all batches)
+    const batch = this.session.batches.find(
+      b => b.batchNumber === batchNumber && b.retryScheduled,
+    );
+
+    if (!batch) {
+      throw new Error(`Batch ${batchNumber} not found or no retry scheduled`);
+    }
+
+    // Get the retryable failures from batch.retryScheduled
+    const retryableFailures = batch.results.filter(
+      result =>
+        result.status === 'failed' &&
+        batch.retryScheduled.failedLinksToRetry.includes(result.linkId),
+    );
+
+    if (retryableFailures.length === 0) {
+      throw new Error('No retryable failures found');
+    }
+
+    // Clear timers and countdowns
+    if (this.retryTimers.has(batch.batchId)) {
+      clearTimeout(this.retryTimers.get(batch.batchId));
+      this.retryTimers.delete(batch.batchId);
+      console.log(`[AutomationController] Cleared retry timer for batch ${batch.batchId}`);
+    }
+
+    if (this.retryCountdownIntervals.has(batch.batchId)) {
+      clearInterval(this.retryCountdownIntervals.get(batch.batchId));
+      this.retryCountdownIntervals.delete(batch.batchId);
+      console.log(`[AutomationController] Cleared countdown for batch ${batch.batchId}`);
+    }
+
+    // Emit force retry event
+    this.emitSSE(this.userId, 'batch:force_retry', {
+      batchNumber: batch.batchNumber,
+      linkCount: retryableFailures.length,
+    });
+
+    // Execute retry immediately
+    console.log(
+      `[AutomationController] Force executing retry for batch ${batch.batchNumber} with ${retryableFailures.length} links`,
+    );
+    await this.retryBatch(batch, retryableFailures);
+
+    return {
+      success: true,
+      batchNumber: batch.batchNumber,
+      linkCount: retryableFailures.length,
+    };
+  }
+
+  /**
+   * Cancel retry (skip failed links and continue to next batch)
+   */
+  async cancelRetry() {
+    // Check if there's a retry pending
+    if (!this.session.automation.retryPending) {
+      throw new Error('No retry scheduled');
+    }
+
+    const batchNumber = this.session.automation.retryBatchNumber;
+    console.log(`[AutomationController] Cancel retry requested for batch ${batchNumber}`);
+
+    // Find the batch with retry scheduled (search in all batches)
+    const batch = this.session.batches.find(
+      b => b.batchNumber === batchNumber && b.retryScheduled,
+    );
+
+    if (!batch) {
+      throw new Error(`Batch ${batchNumber} not found or no retry scheduled`);
+    }
+
+    // Get the failed links that would have been retried
+    const failedLinks = batch.results.filter(
+      result =>
+        result.status === 'failed' &&
+        batch.retryScheduled.failedLinksToRetry.includes(result.linkId),
+    );
+
+    // Clear timers and countdowns
+    if (this.retryTimers.has(batch.batchId)) {
+      clearTimeout(this.retryTimers.get(batch.batchId));
+      this.retryTimers.delete(batch.batchId);
+      console.log(`[AutomationController] Cleared retry timer for batch ${batch.batchId}`);
+    }
+
+    if (this.retryCountdownIntervals.has(batch.batchId)) {
+      clearInterval(this.retryCountdownIntervals.get(batch.batchId));
+      this.retryCountdownIntervals.delete(batch.batchId);
+      console.log(`[AutomationController] Cleared countdown for batch ${batch.batchId}`);
+    }
+
+    // Archive failed links permanently (no retry)
+    failedLinks.forEach(result => {
+      const link = batch.links.find(l => l.id === result.linkId);
+      if (link) {
+        this.session.failedLinks.push({
+          linkId: link.id,
+          url: link.url,
+          comment: link.comment,
+          content: link.content,
+          batchNumber: batch.batchNumber,
+          error: result.error,
+          failedAt: result.processedAt,
+          canRetry: false,
+          canceledAt: new Date(),
+        });
+      }
+    });
+
+    console.log(
+      `[AutomationController] Archived ${failedLinks.length} failed links (retry canceled)`,
+    );
+
+    // Clear retry pending flag
+    this.session.automation.retryPending = false;
+    this.session.automation.retryBatchNumber = null;
+
+    // Clear retry scheduled info from batch
+    batch.retryScheduled = null;
+
+    // Emit cancel retry event
+    this.emitSSE(this.userId, 'batch:retry_canceled', {
+      batchNumber: batch.batchNumber,
+      canceledCount: failedLinks.length,
+    });
+
+    // Resume normal batch processing if automation is still active
+    if (this.session.automation.isActive) {
+      console.log(
+        '[AutomationController] Resuming normal batch processing after retry cancellation',
+      );
+      this.scheduleNextBatch();
+    }
+
+    return {
+      success: true,
+      batchNumber: batch.batchNumber,
+      canceledCount: failedLinks.length,
+    };
+  }
+
+  /**
    * Delete batch links from allLinks
    */
   deleteBatchLinks(batch) {

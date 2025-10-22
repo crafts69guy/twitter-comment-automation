@@ -807,6 +807,35 @@ function App() {
         fetchFailedLinks();
       },
 
+      'batch:force_retry': data => {
+        console.log('Force retry triggered:', data);
+        addLog(
+          'info',
+          `⚡ Force Retry Triggered [Batch ${data.batchNumber}]`,
+          `Skipping countdown - retrying ${data.linkCount} links immediately`,
+          data,
+        );
+      },
+
+      'batch:retry_canceled': data => {
+        console.log('Retry canceled:', data);
+        addLog(
+          'warning',
+          `🚫 Retry Canceled [Batch ${data.batchNumber}]`,
+          `${data.canceledCount} failed links archived. Continuing to next batch.`,
+          data,
+        );
+        toast({
+          title: `Retry Canceled for Batch ${data.batchNumber}`,
+          description: `${data.canceledCount} failed links archived`,
+          status: 'warning',
+          duration: 3000,
+        });
+        // Update status
+        fetchAutomationStatus();
+        fetchFailedLinks();
+      },
+
       'batch:scheduled': data => {
         console.log('Batch scheduled:', data);
         const nextTime = new Date(data.nextBatchTime).toLocaleTimeString();

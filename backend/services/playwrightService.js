@@ -403,7 +403,7 @@ class PlaywrightService {
       console.log('Navigating to Twitter login page...');
       await this.currentPage.goto('https://twitter.com/i/flow/login', {
         waitUntil: 'domcontentloaded',
-        timeout: 90000,
+        timeout: 360000,
       });
 
       // Wait for page to load and settle

@@ -13,13 +13,28 @@ import {
   Icon,
   Flex,
   Divider,
+  Button,
+  useToast,
 } from '@chakra-ui/react';
-import { FiClock, FiAlertCircle, FiRefreshCw } from 'react-icons/fi';
+import { FiClock, FiAlertCircle, FiRefreshCw, FiZap, FiXCircle } from 'react-icons/fi';
+import axios from 'axios';
+
+// API URL
+const API_URL =
+  window.location.hostname === 'localhost' &&
+  window.location.port !== '80' &&
+  window.location.port !== ''
+    ? 'http://localhost:3001'
+    : '';
+const API_BASE = `${API_URL}/api/v2`;
 
 const RetryCountdown = ({ eventSource }) => {
   const [retryInfo, setRetryInfo] = useState(null);
   const [countdown, setCountdown] = useState(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isForceRetrying, setIsForceRetrying] = useState(false);
+  const [isCanceling, setIsCanceling] = useState(false);
+  const toast = useToast();
 
   useEffect(() => {
     if (!eventSource) return;
@@ -77,18 +92,115 @@ const RetryCountdown = ({ eventSource }) => {
       }, 5000);
     };
 
+    // Listen for retry canceled
+    const handleRetryCanceled = e => {
+      const data = JSON.parse(e.data);
+      console.log('🚫 Retry canceled:', data);
+
+      // Clear UI immediately
+      setRetryInfo(null);
+      setCountdown(null);
+      setIsRetrying(false);
+      setIsCanceling(false);
+    };
+
+    // Listen for automation stopped (clear retry UI)
+    const handleAutomationStopped = () => {
+      console.log('🛑 Automation stopped - clearing retry UI');
+
+      // Clear all retry states
+      setRetryInfo(null);
+      setCountdown(null);
+      setIsRetrying(false);
+      setIsForceRetrying(false);
+      setIsCanceling(false);
+    };
+
     eventSource.addEventListener('batch:retry_scheduled', handleRetryScheduled);
     eventSource.addEventListener('retry:countdown', handleCountdown);
     eventSource.addEventListener('batch:retry_started', handleRetryStarted);
     eventSource.addEventListener('batch:retry_completed', handleRetryCompleted);
+    eventSource.addEventListener('batch:retry_canceled', handleRetryCanceled);
+    eventSource.addEventListener('automation:stopped', handleAutomationStopped);
 
     return () => {
       eventSource.removeEventListener('batch:retry_scheduled', handleRetryScheduled);
       eventSource.removeEventListener('retry:countdown', handleCountdown);
       eventSource.removeEventListener('batch:retry_started', handleRetryStarted);
       eventSource.removeEventListener('batch:retry_completed', handleRetryCompleted);
+      eventSource.removeEventListener('batch:retry_canceled', handleRetryCanceled);
+      eventSource.removeEventListener('automation:stopped', handleAutomationStopped);
     };
   }, [eventSource]);
+
+  // Handle force retry
+  const handleForceRetry = async () => {
+    if (isForceRetrying) return;
+
+    try {
+      setIsForceRetrying(true);
+
+      const response = await axios.post(
+        `${API_BASE}/automation/force-retry`,
+        {},
+        { withCredentials: true },
+      );
+
+      if (response.data.success) {
+        toast({
+          title: 'Force Retry Started',
+          description: `Retrying ${response.data.linkCount} links immediately`,
+          status: 'success',
+          duration: 3000,
+        });
+      }
+    } catch (error) {
+      console.error('Error forcing retry:', error);
+      toast({
+        title: 'Force Retry Failed',
+        description: error.response?.data?.message || 'Failed to force retry',
+        status: 'error',
+        duration: 5000,
+      });
+      setIsForceRetrying(false);
+    }
+  };
+
+  // Handle cancel retry
+  const handleCancelRetry = async () => {
+    if (isCanceling) return;
+
+    try {
+      setIsCanceling(true);
+
+      const response = await axios.post(
+        `${API_BASE}/automation/cancel-retry`,
+        {},
+        { withCredentials: true },
+      );
+
+      if (response.data.success) {
+        toast({
+          title: 'Retry Canceled',
+          description: `${response.data.canceledCount} failed links archived. Continuing to next batch.`,
+          status: 'info',
+          duration: 3000,
+        });
+        // Clear retry info immediately
+        setRetryInfo(null);
+        setCountdown(null);
+      }
+    } catch (error) {
+      console.error('Error canceling retry:', error);
+      toast({
+        title: 'Cancel Failed',
+        description: error.response?.data?.message || 'Failed to cancel retry',
+        status: 'error',
+        duration: 5000,
+      });
+      setIsCanceling(false);
+    }
+  };
 
   // Don't render if no retry info
   if (!retryInfo) return null;
@@ -247,6 +359,34 @@ const RetryCountdown = ({ eventSource }) => {
                 ⚠️ New batches are paused until retry completes
               </Text>
             </AlertDescription>
+
+            {/* Action Buttons */}
+            <Divider />
+            <Flex justify="space-between" align="center">
+              <Button
+                leftIcon={<FiXCircle />}
+                colorScheme="red"
+                variant="ghost"
+                size="sm"
+                onClick={handleCancelRetry}
+                isLoading={isCanceling}
+                isDisabled={isForceRetrying}
+                loadingText="Canceling..."
+              >
+                Cancel Retry
+              </Button>
+              <Button
+                leftIcon={<FiZap />}
+                colorScheme="orange"
+                size="sm"
+                onClick={handleForceRetry}
+                isLoading={isForceRetrying}
+                isDisabled={isCanceling}
+                loadingText="Starting retry..."
+              >
+                Force Retry Now
+              </Button>
+            </Flex>
           </VStack>
         </Box>
       </Alert>

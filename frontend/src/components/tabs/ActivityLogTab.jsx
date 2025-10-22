@@ -443,8 +443,10 @@ function ActivityLogTab({ logs, onClearLogs }) {
                                       </Badge>
                                       {/* Show URL icon if log has URL in details */}
                                       {log.details?.url && (
-                                        <Tooltip label={log.details.url}>
-                                          <Icon as={FaLink} color="blue.500" boxSize={3} />
+                                        <Tooltip label={log.details.url} placement="top" hasArrow>
+                                          <span>
+                                            <Icon as={FaLink} color="blue.500" boxSize={3} />
+                                          </span>
                                         </Tooltip>
                                       )}
                                     </HStack>

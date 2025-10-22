@@ -114,6 +114,50 @@ router.post('/force-next', async (req, res) => {
 });
 
 /**
+ * POST /api/automation/force-retry
+ * Force retry immediately (skip countdown)
+ */
+router.post('/force-retry', async (req, res) => {
+  try {
+    const controller = getController(req);
+    const result = await controller.forceRetry();
+    res.json({
+      success: true,
+      message: `Force retry executed for batch ${result.batchNumber} with ${result.linkCount} links`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Error forcing retry:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
+ * POST /api/automation/cancel-retry
+ * Cancel retry and skip to next batch
+ */
+router.post('/cancel-retry', async (req, res) => {
+  try {
+    const controller = getController(req);
+    const result = await controller.cancelRetry();
+    res.json({
+      success: true,
+      message: `Retry canceled for batch ${result.batchNumber}. ${result.canceledCount} failed links archived.`,
+      ...result,
+    });
+  } catch (error) {
+    console.error('Error canceling retry:', error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+});
+
+/**
  * POST /api/automation/sync-sheets
  * Re-fetch links from Google Sheets
  */
