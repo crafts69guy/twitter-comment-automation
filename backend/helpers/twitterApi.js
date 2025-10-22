@@ -150,6 +150,19 @@ export async function fetchTweetData(tweetId, cookies, bearerToken) {
     };
   } catch (error) {
     console.error(`Error fetching tweet ${tweetId}:`, error.message);
+
+    // ✅ DETECT EXPIRED CREDENTIALS
+    const status = error.response?.status;
+    if (status === 401 || status === 403) {
+      console.error('❌ Twitter API: Credentials expired (401/403)');
+      return {
+        success: false,
+        error: 'CREDENTIALS_EXPIRED',
+        needsReauth: true,
+        originalError: error.response?.data?.errors?.[0]?.message || error.message,
+      };
+    }
+
     return {
       success: false,
       error: error.response?.data?.errors?.[0]?.message || error.message,
@@ -204,6 +217,7 @@ export async function fetchTweetContentBatch(links, cookies, bearerToken) {
         linkId: link.id,
         success: false,
         error: tweetData.error,
+        needsReauth: tweetData.needsReauth || false, // ✅ Pass reauth flag
       });
     }
 

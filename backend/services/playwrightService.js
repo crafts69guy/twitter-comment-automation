@@ -187,6 +187,36 @@ class PlaywrightService {
   }
 
   /**
+   * Check if Twitter session is still valid
+   * Returns { valid: boolean, reason: string }
+   */
+  async checkSessionHealth(page) {
+    try {
+      const url = page.url();
+
+      // Check if redirected to login page
+      if (url.includes('/i/flow/login') || url.includes('/login')) {
+        console.warn('⚠️ Session expired - detected login page redirect');
+        return { valid: false, reason: 'redirected_to_login' };
+      }
+
+      // Check for "Rate limit" or "Unauthorized" messages
+      const errorMessages = await page
+        .locator('text=/unauthorized|rate limit|session expired/i')
+        .count();
+      if (errorMessages > 0) {
+        console.warn('⚠️ Session expired - error message detected');
+        return { valid: false, reason: 'error_message_detected' };
+      }
+
+      return { valid: true };
+    } catch (error) {
+      console.error('⚠️ Error checking session health:', error.message);
+      return { valid: false, reason: error.message };
+    }
+  }
+
+  /**
    * Extract Bearer Token and Cookies from browser after login
    */
   async extractCredentialsFromBrowser() {
@@ -321,6 +351,45 @@ class PlaywrightService {
 
       const link = links[i];
       console.log(`Processing link ${i + 1}/${links.length}: ${link.url}`);
+
+      // ✅ CHECK SESSION HEALTH BEFORE PROCESSING EACH LINK
+      const sessionCheck = await this.checkSessionHealth(page);
+      if (!sessionCheck.valid) {
+        console.error(`❌ Session expired: ${sessionCheck.reason}`);
+        console.log('🔄 Attempting to re-login...');
+
+        try {
+          // RE-LOGIN
+          const newCredentials = await this.loginToTwitter(
+            credentials.username,
+            credentials.password,
+          );
+
+          // Send new credentials to controller
+          if (newCredentials && onCredentialsExtracted) {
+            console.log('📤 Sending refreshed credentials to controller...');
+            onCredentialsExtracted(newCredentials);
+          }
+
+          // VERIFY LOGIN SUCCESS
+          const recheckSession = await this.checkSessionHealth(page);
+          if (!recheckSession.valid) {
+            throw new Error('Re-login failed - session still invalid');
+          }
+
+          console.log('✅ Re-login successful, continuing batch processing...');
+        } catch (reloginError) {
+          console.error('❌ Re-login failed:', reloginError.message);
+          // Stop batch processing if re-login fails
+          this.isProcessing = false;
+          return {
+            stopped: true,
+            results,
+            processedCount: i,
+            error: 'Session expired and re-login failed',
+          };
+        }
+      }
 
       // Progress callback
       if (onProgress) {

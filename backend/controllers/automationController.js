@@ -179,6 +179,7 @@ class AutomationController {
     // Update links with fetched content
     let successCount = 0;
     let failedCount = 0;
+    let hasExpiredCreds = false;
 
     contentResults.forEach(result => {
       const link = batchLinks.find(l => l.id === result.linkId);
@@ -191,12 +192,78 @@ class AutomationController {
         } else {
           link.contentError = result.error;
           failedCount++;
+
+          // ✅ CHECK IF CREDENTIALS EXPIRED
+          if (result.needsReauth) {
+            hasExpiredCreds = true;
+          }
+
           console.error(
             `[AutomationController] Failed to fetch content for ${link.url}: ${result.error}`,
           );
         }
       }
     });
+
+    // ✅ HANDLE EXPIRED CREDENTIALS
+    if (hasExpiredCreds) {
+      console.error('🔄 Twitter API credentials expired - attempting to refresh from browser...');
+
+      try {
+        // Try to extract fresh credentials from browser
+        const freshCredentials = await this.playwrightService.extractCredentialsFromBrowser();
+
+        if (freshCredentials.bearerToken && freshCredentials.cookies) {
+          console.log('✅ Successfully refreshed credentials from browser');
+
+          // Update session settings
+          this.session.settings.twitterBearerToken = freshCredentials.bearerToken;
+          this.session.settings.twitterCookies = freshCredentials.cookies;
+
+          // Emit success notification
+          this.emitSSE(this.userId, 'credentials:refreshed', {
+            message: 'Twitter API credentials refreshed successfully',
+          });
+
+          // RETRY FETCHING CONTENT with new credentials
+          console.log('🔄 Retrying to fetch tweet content with refreshed credentials...');
+          const retryResults = await fetchTweetContentBatch(
+            linksWithoutContent,
+            freshCredentials.cookies,
+            freshCredentials.bearerToken,
+          );
+
+          // Update links with retry results
+          retryResults.forEach(result => {
+            const link = batchLinks.find(l => l.id === result.linkId);
+            if (link && result.success) {
+              link.content = result.content;
+              link.author = result.author;
+              link.authorName = result.authorName;
+              link.contentError = null; // Clear previous error
+              successCount++;
+              failedCount--;
+            }
+          });
+
+          console.log(
+            `[AutomationController] Retry completed: ${successCount} success, ${failedCount} failed`,
+          );
+        } else {
+          console.warn('⚠️ Could not extract fresh credentials from browser');
+          this.emitSSE(this.userId, 'warning', {
+            message: 'Twitter API credentials expired',
+            details: 'Please re-login to Twitter in the automation browser',
+          });
+        }
+      } catch (refreshError) {
+        console.error('❌ Failed to refresh credentials:', refreshError.message);
+        this.emitSSE(this.userId, 'error', {
+          message: 'Failed to refresh Twitter API credentials',
+          details: refreshError.message,
+        });
+      }
+    }
 
     console.log(
       `[AutomationController] Fetched content for batch: ${successCount} success, ${failedCount} failed`,
