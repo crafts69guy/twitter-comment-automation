@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   ChakraProvider,
   Box,
@@ -21,6 +21,7 @@ import CurrentBatchTab from './components/tabs/CurrentBatchTab';
 import FailedLinksTab from './components/tabs/FailedLinksTab';
 import OverallStatsTab from './components/tabs/OverallStatsTab';
 import ActivityLogTab from './components/tabs/ActivityLogTab';
+import RetryCountdown from './components/RetryCountdown';
 
 // Determine API URL based on environment
 const API_URL =
@@ -130,10 +131,11 @@ function App() {
     if (settings.twitterUsername || settings.googleSheetUrl) {
       syncSettingsToBackend();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Run once on mount
 
   // Helper function to add log entries (max 100 entries)
-  const addLog = (type, title, message, details = null) => {
+  const addLog = useCallback((type, title, message, details = null) => {
     const newLog = {
       id: Date.now() + Math.random(), // Unique ID
       timestamp: new Date().toLocaleString(),
@@ -148,336 +150,10 @@ function App() {
       // Keep only last 100 logs
       return updated.slice(0, 100);
     });
-  };
-
-  // SSE Event handlers
-  const sseEventHandlers = {
-    'automation:started': data => {
-      console.log('Automation started:', data);
-      addLog(
-        'success',
-        'Automation Started',
-        `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
-        data,
-      );
-      toast({
-        title: 'Automation Started',
-        description: `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
-        status: 'success',
-        duration: 3000,
-      });
-      fetchAutomationStatus();
-    },
-
-    'batch:started': data => {
-      console.log('Batch started:', data);
-      addLog(
-        'info',
-        `Batch ${data.batch.batchNumber} Started`,
-        `Processing ${data.batch.totalLinks} links`,
-        data.batch,
-      );
-      toast({
-        title: `Batch ${data.batch.batchNumber} Started`,
-        description: `Processing ${data.batch.totalLinks} links`,
-        status: 'info',
-        duration: 2000,
-      });
-      fetchCurrentBatch();
-    },
-
-    'link:processing': data => {
-      console.log('Processing link:', data);
-      setCurrentBatchDetails(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          currentLinkIndex: data.currentIndex,
-          progress: data.percentage,
-          currentLink: data.currentLink,
-        };
-      });
-    },
-
-    'link:status': data => {
-      console.log('Link status update:', data);
-      setCurrentBatchDetails(prev => {
-        if (!prev) return prev;
-        return {
-          ...prev,
-          currentLinkStatus: {
-            status: data.status,
-            message: data.message,
-            step: data.step,
-            updatedAt: new Date(),
-          },
-        };
-      });
-
-      // Add to activity log for important status updates
-      const importantStatuses = ['navigating', 'liking', 'typing', 'submitting', 'completed', 'failed'];
-      if (importantStatuses.includes(data.status)) {
-        const logType =
-          data.status === 'completed' ? 'success' :
-          data.status === 'failed' ? 'error' : 'info';
-
-        addLog(
-          logType,
-          `[Batch ${data.batchNumber}] Link Status: ${data.status}`,
-          data.message,
-          { linkIndex: data.linkIndex, step: data.step }
-        );
-      }
-    },
-
-    'link:success': data => {
-      console.log('Link success:', data);
-      addLog('success', 'Link Processed Successfully', data.url || 'Link completed', data);
-      fetchCurrentBatch();
-    },
-
-    'link:failed': data => {
-      console.log('Link failed:', data);
-      addLog('error', 'Link Failed', data.error || 'Processing failed', data);
-      fetchCurrentBatch();
-      fetchFailedLinks();
-    },
-
-    'batch:completed': data => {
-      console.log('Batch completed:', data);
-      addLog(
-        data.batch.failedCount > 0 ? 'warning' : 'success',
-        `Batch ${data.batch.batchNumber} Completed`,
-        `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
-        data.batch,
-      );
-      toast({
-        title: `Batch ${data.batch.batchNumber} Completed`,
-        description: `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
-        status: data.batch.failedCount > 0 ? 'warning' : 'success',
-        duration: 3000,
-      });
-      setCurrentBatchDetails(null);
-      fetchAutomationStatus();
-      fetchFailedLinks();
-    },
-
-    'batch:scheduled': data => {
-      console.log('Batch scheduled:', data);
-      const nextTime = new Date(data.nextBatchTime).toLocaleTimeString();
-      addLog('info', 'Next Batch Scheduled', `Waiting until ${nextTime}`, data);
-      setCountdown({
-        nextBatchTime: new Date(data.nextBatchTime),
-        remainingMs: new Date(data.nextBatchTime) - Date.now(),
-      });
-    },
-
-    'countdown:update': data => {
-      setCountdown({
-        nextBatchTime: new Date(data.nextBatchTime),
-        remainingMs: data.remainingMs,
-      });
-    },
-
-    'automation:paused': data => {
-      console.log('Automation paused:', data);
-      addLog('info', 'Automation Paused', 'Processing paused by user', data);
-      toast({
-        title: 'Automation Paused',
-        status: 'info',
-        duration: 2000,
-      });
-      fetchAutomationStatus();
-    },
-
-    'automation:resumed': data => {
-      console.log('Automation resumed:', data);
-      addLog('success', 'Automation Resumed', 'Processing resumed', data);
-      toast({
-        title: 'Automation Resumed',
-        status: 'success',
-        duration: 2000,
-      });
-      fetchAutomationStatus();
-    },
-
-    'automation:stopped': data => {
-      console.log('Automation stopped:', data);
-      addLog('warning', 'Automation Stopped', 'Automation stopped by user', data);
-      toast({
-        title: 'Automation Stopped',
-        status: 'warning',
-        duration: 2000,
-      });
-      setAutomationStatus(prev => ({
-        ...prev,
-        isActive: false,
-        isPaused: false,
-        currentBatch: null,
-        nextBatchTime: null,
-      }));
-      setCurrentBatchDetails(null);
-      setCountdown({
-        remainingMs: 0,
-        nextBatchTime: null,
-      });
-    },
-
-    'automation:completed': data => {
-      console.log('Automation completed:', data);
-      addLog(
-        'success',
-        'Automation Completed',
-        `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
-        data.stats,
-      );
-      toast({
-        title: 'Automation Completed',
-        description: `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
-        status: 'success',
-        duration: 5000,
-      });
-      fetchAutomationStatus();
-    },
-
-    'batch:skipped': data => {
-      console.log('Batch skipped:', data);
-      addLog(
-        'warning',
-        'Batch Skipped',
-        `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
-        data,
-      );
-      toast({
-        title: 'Batch Skipped',
-        description: `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
-        status: 'warning',
-        duration: 3000,
-      });
-    },
-
-    'sheets:synced': data => {
-      console.log('Sheets synced:', data);
-      addLog(
-        'success',
-        'Google Sheets Synced',
-        `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
-        data,
-      );
-      toast({
-        title: 'Sheets Synced',
-        description: `Added ${data.newLinks} new links`,
-        status: 'success',
-        duration: 3000,
-      });
-    },
-
-    'credentials:extracted': data => {
-      console.log('Credentials extracted from browser (via SSE):', data);
-
-      // Update local settings with extracted credentials (actual tokens, not display text)
-      if (data.bearerToken || data.cookies) {
-        setSettings(prev => {
-          const updated = { ...prev };
-
-          // Only update if we have actual credential values (not empty strings)
-          if (data.bearerToken && data.bearerToken.trim() !== '') {
-            updated.twitterBearerToken = data.bearerToken;
-            console.log('✅ Updated twitterBearerToken in localStorage (SSE)');
-          }
-
-          if (data.cookies && data.cookies.trim() !== '') {
-            updated.twitterCookies = data.cookies;
-            console.log('✅ Updated twitterCookies in localStorage (SSE)');
-          }
-
-          // Save to localStorage immediately
-          saveSettingsToStorage(updated);
-
-          return updated;
-        });
-
-        // Log to Activity Log
-        addLog(
-          'success',
-          '🔑 Twitter Credentials Extracted (Re-login)',
-          data.message || 'Bearer Token and Cookies extracted after re-authentication',
-          {
-            bearerTokenLength: data.bearerToken?.length || 0,
-            cookiesCount: data.cookies?.split(';').length || 0,
-            extractedAt: new Date().toISOString(),
-            source: 'SSE Event',
-          },
-        );
-      }
-
-      toast({
-        title: '✅ Credentials Extracted!',
-        description:
-          'Bearer Token and Cookies have been automatically extracted and saved to localStorage',
-        status: 'success',
-        duration: 5000,
-        isClosable: true,
-      });
-    },
-
-    'comments:generated': data => {
-      console.log('Comments generated:', data);
-      addLog('success', 'Comments Generated', `Generated ${data.count} AI comments`, data);
-      toast({
-        title: 'Comments Generated',
-        description: `Generated ${data.count} AI comments`,
-        status: 'success',
-        duration: 2000,
-      });
-    },
-
-    'content:fetched': data => {
-      console.log('Content fetched:', data);
-      addLog(
-        data.failedCount > 0 ? 'warning' : 'success',
-        'Tweet Content Fetched',
-        `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
-        data,
-      );
-      toast({
-        title: 'Tweet Content Fetched',
-        description: `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
-        status: data.failedCount > 0 ? 'warning' : 'success',
-        duration: 3000,
-      });
-    },
-
-    error: data => {
-      console.error('Error:', data);
-      addLog('error', data.message || 'Error', data.details || '', data);
-      toast({
-        title: data.message || 'Error',
-        description: data.details || 'An error occurred',
-        status: 'error',
-        duration: 5000,
-        isClosable: true,
-      });
-    },
-
-    warning: data => {
-      console.warn('Warning:', data);
-      addLog('warning', data.message || 'Warning', data.details || '', data);
-      toast({
-        title: data.message || 'Warning',
-        description: data.details || '',
-        status: 'warning',
-        duration: 4000,
-        isClosable: true,
-      });
-    },
-  };
-
-  // Initialize SSE connection
-  const { isConnected } = useSSE(SSE_URL, sseEventHandlers, true);
+  }, []);
 
   // API functions
-  const fetchAutomationStatus = async () => {
+  const fetchAutomationStatus = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE}/automation/status`, {
         withCredentials: true,
@@ -488,9 +164,9 @@ function App() {
     } catch (error) {
       console.error('Error fetching automation status:', error);
     }
-  };
+  }, []);
 
-  const fetchCurrentBatch = async () => {
+  const fetchCurrentBatch = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE}/batches/current`, {
         withCredentials: true,
@@ -501,9 +177,9 @@ function App() {
     } catch (error) {
       console.error('Error fetching current batch:', error);
     }
-  };
+  }, []);
 
-  const fetchFailedLinks = async () => {
+  const fetchFailedLinks = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE}/failed-links`, {
         withCredentials: true,
@@ -514,9 +190,9 @@ function App() {
     } catch (error) {
       console.error('Error fetching failed links:', error);
     }
-  };
+  }, []);
 
-  const fetchBrowserStatus = async () => {
+  const fetchBrowserStatus = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE}/browser/status`, {
         withCredentials: true,
@@ -531,9 +207,9 @@ function App() {
     } catch (error) {
       console.error('Error fetching browser status:', error);
     }
-  };
+  }, []);
 
-  const startAutomation = async () => {
+  const startAutomation = useCallback(async () => {
     try {
       // Sync settings to backend before starting (to ensure latest credentials are sent)
       console.log('🔄 Syncing settings before starting automation...');
@@ -572,9 +248,9 @@ function App() {
         duration: 3000,
       });
     }
-  };
+  }, [settings, toast]);
 
-  const stopAutomation = async () => {
+  const stopAutomation = useCallback(async () => {
     try {
       const response = await axios.post(
         `${API_BASE}/automation/stop`,
@@ -593,9 +269,9 @@ function App() {
     } catch (error) {
       console.error('Error stopping automation:', error);
     }
-  };
+  }, [toast]);
 
-  const pauseAutomation = async () => {
+  const pauseAutomation = useCallback(async () => {
     try {
       const response = await axios.post(
         `${API_BASE}/automation/pause`,
@@ -614,9 +290,9 @@ function App() {
     } catch (error) {
       console.error('Error pausing automation:', error);
     }
-  };
+  }, [toast]);
 
-  const resumeAutomation = async () => {
+  const resumeAutomation = useCallback(async () => {
     try {
       const response = await axios.post(
         `${API_BASE}/automation/resume`,
@@ -635,9 +311,9 @@ function App() {
     } catch (error) {
       console.error('Error resuming automation:', error);
     }
-  };
+  }, [toast]);
 
-  const forceNextBatch = async () => {
+  const forceNextBatch = useCallback(async () => {
     try {
       const response = await axios.post(
         `${API_BASE}/automation/force-next`,
@@ -657,9 +333,9 @@ function App() {
     } catch (error) {
       console.error('Error forcing next batch:', error);
     }
-  };
+  }, [toast]);
 
-  const syncGoogleSheets = async () => {
+  const syncGoogleSheets = useCallback(async () => {
     try {
       const response = await axios.post(
         `${API_BASE}/automation/sync-sheets`,
@@ -685,48 +361,51 @@ function App() {
         duration: 3000,
       });
     }
-  };
+  }, [toast]);
 
-  const updateSettings = async newSettings => {
-    try {
-      const response = await axios.post(`${API_BASE}/automation/update-settings`, newSettings, {
-        withCredentials: true,
-      });
-      if (response.data.success) {
-        const updatedSettings = response.data.settings;
-        setSettings(updatedSettings);
-
-        // Save to localStorage
-        try {
-          localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
-          console.log('Settings saved to localStorage:', updatedSettings);
-          setIsSynced(true);
-        } catch (storageError) {
-          console.error('Error saving settings to localStorage:', storageError);
-        }
-
-        toast({
-          title: 'Settings Updated',
-          status: 'success',
-          duration: 1000,
+  const updateSettings = useCallback(
+    async newSettings => {
+      try {
+        const response = await axios.post(`${API_BASE}/automation/update-settings`, newSettings, {
+          withCredentials: true,
         });
+        if (response.data.success) {
+          const updatedSettings = response.data.settings;
+          setSettings(updatedSettings);
 
-        return { success: true, settings: updatedSettings };
+          // Save to localStorage
+          try {
+            localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
+            console.log('Settings saved to localStorage:', updatedSettings);
+            setIsSynced(true);
+          } catch (storageError) {
+            console.error('Error saving settings to localStorage:', storageError);
+          }
+
+          toast({
+            title: 'Settings Updated',
+            status: 'success',
+            duration: 1000,
+          });
+
+          return { success: true, settings: updatedSettings };
+        }
+        return { success: false, error: 'Failed to update settings' };
+      } catch (error) {
+        console.error('Error updating settings:', error);
+        toast({
+          title: 'Error',
+          description: 'Failed to update settings',
+          status: 'error',
+          duration: 3000,
+        });
+        return { success: false, error: error.message };
       }
-      return { success: false, error: 'Failed to update settings' };
-    } catch (error) {
-      console.error('Error updating settings:', error);
-      toast({
-        title: 'Error',
-        description: 'Failed to update settings',
-        status: 'error',
-        duration: 3000,
-      });
-      return { success: false, error: error.message };
-    }
-  };
+    },
+    [toast],
+  );
 
-  const openBrowser = async () => {
+  const openBrowser = useCallback(async () => {
     try {
       // First, sync settings to ensure backend has latest credentials
       console.log('🔄 Syncing settings before opening browser...');
@@ -830,15 +509,10 @@ function App() {
       setBrowserStatus({ isOpen: false, isLoggedIn: false, currentUrl: null });
 
       // Log error to activity log
-      addLog(
-        'error',
-        '❌ Browser Open Failed',
-        errorMessage,
-        {
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        },
-      );
+      addLog('error', '❌ Browser Open Failed', errorMessage, {
+        error: error.message,
+        timestamp: new Date().toISOString(),
+      });
 
       toast({
         title: 'Error',
@@ -847,9 +521,9 @@ function App() {
         duration: 5000,
       });
     }
-  };
+  }, [addLog, settings, toast]);
 
-  const closeBrowser = async () => {
+  const closeBrowser = useCallback(async () => {
     try {
       const response = await axios.post(
         `${API_BASE}/browser/close`,
@@ -869,7 +543,7 @@ function App() {
     } catch (error) {
       console.error('Error closing browser:', error);
     }
-  };
+  }, [toast]);
 
   // Initialize on mount
   useEffect(() => {
@@ -919,7 +593,435 @@ function App() {
     }, 10000);
 
     return () => clearInterval(interval);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // SSE Event handlers
+  const sseEventHandlers = useMemo(
+    () => ({
+      'automation:started': data => {
+        console.log('Automation started:', data);
+        addLog(
+          'success',
+          'Automation Started',
+          `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
+          data,
+        );
+        toast({
+          title: 'Automation Started',
+          description: `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
+          status: 'success',
+          duration: 3000,
+        });
+        fetchAutomationStatus();
+      },
+
+      'batch:started': data => {
+        console.log('Batch started:', data);
+        addLog(
+          'info',
+          `Batch ${data.batch.batchNumber} Started`,
+          `Processing ${data.batch.totalLinks} links`,
+          data.batch,
+        );
+        toast({
+          title: `Batch ${data.batch.batchNumber} Started`,
+          description: `Processing ${data.batch.totalLinks} links`,
+          status: 'info',
+          duration: 2000,
+        });
+        fetchCurrentBatch();
+      },
+
+      'link:processing': data => {
+        console.log('Processing link:', data);
+        setCurrentBatchDetails(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            currentLinkIndex: data.currentIndex,
+            progress: data.percentage,
+            currentLink: data.currentLink,
+          };
+        });
+      },
+
+      'link:status': data => {
+        console.log('Link status update:', data);
+        setCurrentBatchDetails(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            currentLinkStatus: {
+              status: data.status,
+              message: data.message,
+              step: data.step,
+              updatedAt: new Date(),
+            },
+          };
+        });
+
+        // Add to activity log for important status updates
+        const importantStatuses = [
+          'navigating',
+          'liking',
+          'typing',
+          'submitting',
+          'completed',
+          'failed',
+        ];
+        if (importantStatuses.includes(data.status)) {
+          const logType =
+            data.status === 'completed' ? 'success' : data.status === 'failed' ? 'error' : 'info';
+
+          addLog(logType, `[Batch ${data.batchNumber}] Link Status: ${data.status}`, data.message, {
+            linkIndex: data.linkIndex,
+            step: data.step,
+          });
+        }
+      },
+
+      'link:success': data => {
+        console.log('Link success:', data);
+        addLog(
+          'success',
+          `Link Success [Batch ${data.batchNumber}]`,
+          data.url || 'Link completed',
+          data,
+        );
+        fetchCurrentBatch();
+      },
+
+      'link:failed': data => {
+        console.log('Link failed:', data);
+        addLog(
+          'error',
+          `Link Failed [Batch ${data.batchNumber}]`,
+          data.url || data.error || 'Processing failed',
+          data,
+        );
+        fetchCurrentBatch();
+        fetchFailedLinks();
+      },
+
+      'link:retry_success': data => {
+        console.log('Link retry success:', data);
+        addLog(
+          'success',
+          `Retry Succeeded [Batch ${data.batchNumber}]`,
+          data.url || 'Link retried successfully',
+          data,
+        );
+        fetchCurrentBatch();
+      },
+
+      'link:retry_failed': data => {
+        console.log('Link retry failed:', data);
+        addLog(
+          'error',
+          `Retry Failed [Batch ${data.batchNumber}]`,
+          data.url || data.error || 'Retry failed',
+          data,
+        );
+        fetchCurrentBatch();
+        fetchFailedLinks();
+      },
+
+      'batch:completed': data => {
+        console.log('Batch completed:', data);
+        addLog(
+          data.batch.failedCount > 0 ? 'warning' : 'success',
+          `Batch ${data.batch.batchNumber} Completed`,
+          `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
+          data.batch,
+        );
+        toast({
+          title: `Batch ${data.batch.batchNumber} Completed`,
+          description: `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
+          status: data.batch.failedCount > 0 ? 'warning' : 'success',
+          duration: 3000,
+        });
+        setCurrentBatchDetails(null);
+        fetchAutomationStatus();
+        fetchFailedLinks();
+      },
+
+      'batch:retry_scheduled': data => {
+        console.log('Retry scheduled:', data);
+        const retryTime = new Date(data.retryAt).toLocaleTimeString();
+        addLog(
+          'warning',
+          `🔄 Retry Scheduled [Batch ${data.batchNumber}]`,
+          `${data.failedCount} failed links will be retried at ${retryTime} (${data.delayMinutes}min delay)`,
+          {
+            ...data,
+            failureRate: `${data.failureRate}%`,
+          },
+        );
+        toast({
+          title: `Retry Scheduled for Batch ${data.batchNumber}`,
+          description: `${data.failedCount} links will retry in ${data.delayMinutes} minutes`,
+          status: 'info',
+          duration: 5000,
+        });
+        // Fetch status to update retryPending flag
+        fetchAutomationStatus();
+      },
+
+      'batch:retry_started': data => {
+        console.log('Retry started:', data);
+        addLog(
+          'info',
+          `🔄 Retry Started [Batch ${data.batchNumber}]`,
+          `Retrying ${data.retryCount} failed links...`,
+          data,
+        );
+        toast({
+          title: `Retrying Batch ${data.batchNumber}`,
+          description: `Processing ${data.retryCount} failed links`,
+          status: 'info',
+          duration: 3000,
+        });
+        // Fetch current batch to show retry progress
+        fetchCurrentBatch();
+        fetchAutomationStatus();
+      },
+
+      'batch:retry_completed': data => {
+        console.log('Retry completed:', data);
+        addLog(
+          data.failedCount > 0 ? 'warning' : 'success',
+          `✅ Retry Completed [Batch ${data.batchNumber}]`,
+          `Success: ${data.successCount}, Still Failed: ${data.failedCount}, Total: ${data.totalRetried}`,
+          data,
+        );
+        toast({
+          title: `Retry Completed for Batch ${data.batchNumber}`,
+          description: `${data.successCount} succeeded, ${data.failedCount} still failed`,
+          status: data.failedCount > 0 ? 'warning' : 'success',
+          duration: 5000,
+        });
+        // Update all statuses
+        setCurrentBatchDetails(null);
+        fetchAutomationStatus();
+        fetchFailedLinks();
+      },
+
+      'batch:scheduled': data => {
+        console.log('Batch scheduled:', data);
+        const nextTime = new Date(data.nextBatchTime).toLocaleTimeString();
+        addLog('info', 'Next Batch Scheduled', `Waiting until ${nextTime}`, data);
+        setCountdown({
+          nextBatchTime: new Date(data.nextBatchTime),
+          remainingMs: new Date(data.nextBatchTime) - Date.now(),
+        });
+      },
+
+      'countdown:update': data => {
+        setCountdown({
+          nextBatchTime: new Date(data.nextBatchTime),
+          remainingMs: data.remainingMs,
+        });
+      },
+
+      'automation:paused': data => {
+        console.log('Automation paused:', data);
+        addLog('info', 'Automation Paused', 'Processing paused by user', data);
+        toast({
+          title: 'Automation Paused',
+          status: 'info',
+          duration: 2000,
+        });
+        fetchAutomationStatus();
+      },
+
+      'automation:resumed': data => {
+        console.log('Automation resumed:', data);
+        addLog('success', 'Automation Resumed', 'Processing resumed', data);
+        toast({
+          title: 'Automation Resumed',
+          status: 'success',
+          duration: 2000,
+        });
+        fetchAutomationStatus();
+      },
+
+      'automation:stopped': data => {
+        console.log('Automation stopped:', data);
+        addLog('warning', 'Automation Stopped', 'Automation stopped by user', data);
+        toast({
+          title: 'Automation Stopped',
+          status: 'warning',
+          duration: 2000,
+        });
+        setAutomationStatus(prev => ({
+          ...prev,
+          isActive: false,
+          isPaused: false,
+          currentBatch: null,
+          nextBatchTime: null,
+        }));
+        setCurrentBatchDetails(null);
+        setCountdown({
+          remainingMs: 0,
+          nextBatchTime: null,
+        });
+      },
+
+      'automation:completed': data => {
+        console.log('Automation completed:', data);
+        addLog(
+          'success',
+          'Automation Completed',
+          `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
+          data.stats,
+        );
+        toast({
+          title: 'Automation Completed',
+          description: `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
+          status: 'success',
+          duration: 5000,
+        });
+        fetchAutomationStatus();
+      },
+
+      'batch:skipped': data => {
+        console.log('Batch skipped:', data);
+        addLog(
+          'warning',
+          'Batch Skipped',
+          `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
+          data,
+        );
+        toast({
+          title: 'Batch Skipped',
+          description: `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
+          status: 'warning',
+          duration: 3000,
+        });
+      },
+
+      'sheets:synced': data => {
+        console.log('Sheets synced:', data);
+        addLog(
+          'success',
+          'Google Sheets Synced',
+          `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+          data,
+        );
+        toast({
+          title: 'Sheets Synced',
+          description: `Added ${data.newLinks} new links`,
+          status: 'success',
+          duration: 3000,
+        });
+      },
+
+      'credentials:extracted': data => {
+        console.log('Credentials extracted from browser (via SSE):', data);
+
+        // Update local settings with extracted credentials (actual tokens, not display text)
+        if (data.bearerToken || data.cookies) {
+          setSettings(prev => {
+            const updated = { ...prev };
+
+            // Only update if we have actual credential values (not empty strings)
+            if (data.bearerToken && data.bearerToken.trim() !== '') {
+              updated.twitterBearerToken = data.bearerToken;
+              console.log('✅ Updated twitterBearerToken in localStorage (SSE)');
+            }
+
+            if (data.cookies && data.cookies.trim() !== '') {
+              updated.twitterCookies = data.cookies;
+              console.log('✅ Updated twitterCookies in localStorage (SSE)');
+            }
+
+            // Save to localStorage immediately
+            saveSettingsToStorage(updated);
+
+            return updated;
+          });
+
+          // Log to Activity Log
+          addLog(
+            'success',
+            '🔑 Twitter Credentials Extracted (Re-login)',
+            data.message || 'Bearer Token and Cookies extracted after re-authentication',
+            {
+              bearerTokenLength: data.bearerToken?.length || 0,
+              cookiesCount: data.cookies?.split(';').length || 0,
+              extractedAt: new Date().toISOString(),
+              source: 'SSE Event',
+            },
+          );
+        }
+
+        toast({
+          title: '✅ Credentials Extracted!',
+          description:
+            'Bearer Token and Cookies have been automatically extracted and saved to localStorage',
+          status: 'success',
+          duration: 5000,
+          isClosable: true,
+        });
+      },
+
+      'comments:generated': data => {
+        console.log('Comments generated:', data);
+        addLog('success', 'Comments Generated', `Generated ${data.count} AI comments`, data);
+        toast({
+          title: 'Comments Generated',
+          description: `Generated ${data.count} AI comments`,
+          status: 'success',
+          duration: 2000,
+        });
+      },
+
+      'content:fetched': data => {
+        console.log('Content fetched:', data);
+        addLog(
+          data.failedCount > 0 ? 'warning' : 'success',
+          'Tweet Content Fetched',
+          `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
+          data,
+        );
+        toast({
+          title: 'Tweet Content Fetched',
+          description: `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
+          status: data.failedCount > 0 ? 'warning' : 'success',
+          duration: 3000,
+        });
+      },
+
+      error: data => {
+        console.error('Error:', data);
+        addLog('error', data.message || 'Error', data.details || '', data);
+        toast({
+          title: data.message || 'Error',
+          description: data.details || 'An error occurred',
+          status: 'error',
+          duration: 5000,
+          isClosable: true,
+        });
+      },
+
+      warning: data => {
+        console.warn('Warning:', data);
+        addLog('warning', data.message || 'Warning', data.details || '', data);
+        toast({
+          title: data.message || 'Warning',
+          description: data.details || '',
+          status: 'warning',
+          duration: 4000,
+          isClosable: true,
+        });
+      },
+    }),
+    [addLog, fetchAutomationStatus, fetchCurrentBatch, fetchFailedLinks, toast],
+  );
+
+  // Initialize SSE connection
+  const { isConnected, eventSource } = useSSE(SSE_URL, sseEventHandlers, true);
 
   return (
     <ChakraProvider>
@@ -943,6 +1045,9 @@ function App() {
               </Badge>
             </Box>
           </Box>
+
+          {/* Retry Countdown Component */}
+          <RetryCountdown eventSource={eventSource} />
 
           {/* Tabs */}
           <Tabs variant="enclosed" colorScheme="blue">

@@ -403,7 +403,7 @@ class PlaywrightService {
       console.log('Navigating to Twitter login page...');
       await this.currentPage.goto('https://twitter.com/i/flow/login', {
         waitUntil: 'domcontentloaded',
-        timeout: 60000,
+        timeout: 90000,
       });
 
       // Wait for page to load and settle
@@ -412,7 +412,7 @@ class PlaywrightService {
       // Step 1: Enter username/email
       console.log('Entering username...');
       const usernameInput = this.currentPage.locator('input[autocomplete="username"]');
-      await usernameInput.waitFor({ timeout: 10000 });
+      await usernameInput.waitFor({ timeout: 50000 });
 
       // Move mouse to input field and click (human-like)
       await this.moveMouseToElement(usernameInput);
@@ -463,7 +463,7 @@ class PlaywrightService {
       // Step 2: Enter password
       console.log('Entering password...');
       const passwordInput = this.currentPage.locator('input[name="password"]');
-      await passwordInput.waitFor({ timeout: 10000 });
+      await passwordInput.waitFor({ timeout: 30000 });
 
       // Move mouse and click password field to focus
       await this.moveMouseToElement(passwordInput);
@@ -1116,7 +1116,7 @@ class PlaywrightService {
       for (const selector of textareaSelectors) {
         try {
           const element = page.locator(selector).first();
-          await element.waitFor({ timeout: 3000, state: 'visible' });
+          await element.waitFor({ timeout: 15000, state: 'visible' });
 
           // Double check element is actually visible and interactable
           const isVisible = await element.isVisible();
@@ -1239,7 +1239,7 @@ class PlaywrightService {
   /**
    * Wait for submit button to be enabled
    */
-  async waitForEnabledSubmitButton(page, maxWaitTime = 15000) {
+  async waitForEnabledSubmitButton(page, maxWaitTime = 30000) {
     try {
       const submitButton = page.locator('button[data-testid="tweetButtonInline"]');
 

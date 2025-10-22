@@ -1,16 +1,23 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 
 /**
  * Custom hook for Server-Sent Events (SSE)
  * @param {string} url - SSE endpoint URL
  * @param {object} eventHandlers - Object mapping event names to handler functions
  * @param {boolean} enabled - Whether to enable SSE connection
- * @returns {object} - { isConnected, reconnect, disconnect }
+ * @returns {object} - { isConnected, eventSource, reconnect, disconnect }
  */
 export const useSSE = (url, eventHandlers = {}, enabled = true) => {
   const eventSourceRef = useRef(null);
+  const [eventSource, setEventSource] = useState(null);
   const isConnectedRef = useRef(false);
   const reconnectTimeoutRef = useRef(null);
+  const eventHandlersRef = useRef(eventHandlers);
+
+  // Update event handlers ref when they change
+  useEffect(() => {
+    eventHandlersRef.current = eventHandlers;
+  }, [eventHandlers]);
 
   const connect = useCallback(() => {
     if (!enabled || eventSourceRef.current) {
@@ -22,6 +29,7 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
     try {
       const eventSource = new EventSource(url, { withCredentials: true });
       eventSourceRef.current = eventSource;
+      setEventSource(eventSource); // Update state to trigger re-render
 
       // Handle connection open
       eventSource.onopen = () => {
@@ -30,7 +38,7 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
       };
 
       // Handle initial connection event
-      eventSource.onmessage = (event) => {
+      eventSource.onmessage = event => {
         try {
           const data = JSON.parse(event.data);
           console.log('[SSE] Received data:', data);
@@ -44,13 +52,14 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
       };
 
       // Handle errors
-      eventSource.onerror = (error) => {
+      eventSource.onerror = error => {
         console.error('[SSE] Connection error:', error);
         isConnectedRef.current = false;
 
         // Close and attempt reconnect
         eventSource.close();
         eventSourceRef.current = null;
+        setEventSource(null); // Clear state
 
         // Reconnect after 3 seconds
         if (enabled) {
@@ -61,23 +70,25 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
         }
       };
 
-      // Register custom event handlers
-      Object.entries(eventHandlers).forEach(([eventType, handler]) => {
-        eventSource.addEventListener(eventType, (event) => {
+      // Register custom event handlers using ref
+      Object.entries(eventHandlersRef.current).forEach(([eventType]) => {
+        eventSource.addEventListener(eventType, event => {
           try {
             const data = JSON.parse(event.data);
             console.log(`[SSE] Event "${eventType}":`, data);
-            handler(data);
+            // Always use ref to get latest handler (supports hot updates without reconnect)
+            if (eventHandlersRef.current[eventType]) {
+              eventHandlersRef.current[eventType](data);
+            }
           } catch (error) {
             console.error(`[SSE] Error handling event "${eventType}":`, error);
           }
         });
       });
-
     } catch (error) {
       console.error('[SSE] Error creating EventSource:', error);
     }
-  }, [url, enabled, eventHandlers]);
+  }, [url, enabled]);
 
   const disconnect = useCallback(() => {
     console.log('[SSE] Disconnecting...');
@@ -89,6 +100,7 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
+      setEventSource(null); // Clear state
     }
 
     isConnectedRef.current = false;
@@ -116,8 +128,9 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
 
   return {
     isConnected: isConnectedRef.current,
+    eventSource, // Return from state instead of ref
     reconnect,
-    disconnect
+    disconnect,
   };
 };
 
