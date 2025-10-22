@@ -444,6 +444,7 @@ class AutomationController {
       currentLinkIndex: 0,
       status: 'processing',
       startedAt: new Date(),
+      currentLinkStatus: null, // Track detailed status of current link
     };
 
     nextBatch.status = 'processing';
@@ -462,9 +463,11 @@ class AutomationController {
     });
 
     // Step 1: Fetch tweet content for this batch
+    this.updateCurrentLinkStatus('fetching_content', 'Fetching tweet content...', '1/4');
     await this.fetchTweetContentForBatch(nextBatch.links);
 
     // Step 2: Generate AI comments for this batch
+    this.updateCurrentLinkStatus('generating_comments', 'Generating AI comments...', '2/4');
     await this.generateCommentsForBatch(nextBatch.links);
 
     // Filter out links that couldn't be processed (no content/comment)
@@ -532,6 +535,14 @@ class AutomationController {
       progress => {
         // Progress callback
         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
+
+        // Update status when starting to process a new link
+        this.updateCurrentLinkStatus(
+          'processing',
+          `Processing link ${progress.currentIndex + 1}/${progress.total}`,
+          '3/4'
+        );
+
         this.emitSSE(this.userId, 'link:processing', {
           ...progress,
           batchNumber: nextBatch.batchNumber,
@@ -540,6 +551,21 @@ class AutomationController {
       linkResult => {
         // Link complete callback
         this.handleLinkResult(nextBatch, linkResult);
+
+        // Update status after completing link
+        if (linkResult.status === 'success') {
+          this.updateCurrentLinkStatus(
+            'completed',
+            'Link processed successfully',
+            '4/4'
+          );
+        } else {
+          this.updateCurrentLinkStatus(
+            'failed',
+            `Failed: ${linkResult.error}`,
+            '4/4'
+          );
+        }
       },
       extractedCredentials => {
         // Credentials extracted callback
@@ -564,6 +590,10 @@ class AutomationController {
             message: 'Bearer Token and Cookies extracted from browser successfully!',
           });
         }
+      },
+      (status, message, step) => {
+        // Status update callback from playwrightService
+        this.updateCurrentLinkStatus(status, message, step);
       },
     );
 
@@ -899,6 +929,31 @@ class AutomationController {
   getCurrentBatch() {
     if (!this.session.currentBatch) return null;
     return this.session.batches.find(b => b.batchId === this.session.currentBatch.batchId);
+  }
+
+  /**
+   * Update current link processing status
+   */
+  updateCurrentLinkStatus(status, message, step = null) {
+    if (!this.session.currentBatch) return;
+
+    this.session.currentBatch.currentLinkStatus = {
+      status,
+      message,
+      step,
+      updatedAt: new Date(),
+    };
+
+    // Emit status update via SSE
+    this.emitSSE(this.userId, 'link:status', {
+      batchNumber: this.session.currentBatch.batchNumber,
+      linkIndex: this.session.currentBatch.currentLinkIndex,
+      status,
+      message,
+      step,
+    });
+
+    console.log(`[LinkStatus] ${step ? `[${step}]` : ''} ${status}: ${message}`);
   }
 
   /**

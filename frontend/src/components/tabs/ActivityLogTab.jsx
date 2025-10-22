@@ -15,6 +15,10 @@ import {
   Divider,
   useToast,
   Tooltip,
+  Collapse,
+  Switch,
+  FormControl,
+  FormLabel,
 } from '@chakra-ui/react';
 import {
   FaCheckCircle,
@@ -24,12 +28,21 @@ import {
   FaDownload,
   FaTrash,
   FaArrowDown,
+  FaChevronDown,
+  FaChevronRight,
+  FaClock,
+  FaLink,
+  FaLayerGroup,
 } from 'react-icons/fa';
 
 function ActivityLogTab({ logs, onClearLogs }) {
   const [filterType, setFilterType] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [autoScroll, setAutoScroll] = useState(true);
+  const [timelineView, setTimelineView] = useState(true);
+  const [groupByBatch, setGroupByBatch] = useState(true); // Enable by default
+  const [expandedGroups, setExpandedGroups] = useState({});
+  const [expandedDetails, setExpandedDetails] = useState({});
   const logContainerRef = useRef(null);
   const toast = useToast();
 
@@ -59,6 +72,49 @@ function ActivityLogTab({ logs, onClearLogs }) {
     return true;
   });
 
+  // Group logs by batch number if enabled
+  const groupedLogs = groupByBatch
+    ? filteredLogs.reduce((groups, log) => {
+        // Extract batch number from log title
+        const batchMatch = log.title.match(/Batch (\d+)/);
+        const groupKey = batchMatch ? `Batch ${batchMatch[1]}` : 'General';
+
+        if (!groups[groupKey]) {
+          groups[groupKey] = [];
+        }
+        groups[groupKey].push(log);
+        return groups;
+      }, {})
+    : { All: filteredLogs };
+
+  // Calculate time elapsed between logs
+  const getTimeElapsed = (currentLog, prevLog) => {
+    if (!prevLog) return null;
+    const current = new Date(currentLog.timestamp);
+    const prev = new Date(prevLog.timestamp);
+    const diff = current - prev;
+
+    if (diff < 1000) return `${diff}ms`;
+    if (diff < 60000) return `${Math.round(diff / 1000)}s`;
+    return `${Math.round(diff / 60000)}m`;
+  };
+
+  // Toggle group expansion
+  const toggleGroup = groupKey => {
+    setExpandedGroups(prev => ({
+      ...prev,
+      [groupKey]: !prev[groupKey],
+    }));
+  };
+
+  // Toggle details expansion
+  const toggleDetails = logId => {
+    setExpandedDetails(prev => ({
+      ...prev,
+      [logId]: !prev[logId],
+    }));
+  };
+
   // Export logs to JSON
   const handleExportJSON = () => {
     const dataStr = JSON.stringify(logs, null, 2);
@@ -83,9 +139,7 @@ function ActivityLogTab({ logs, onClearLogs }) {
     const headers = ['Timestamp', 'Type', 'Title', 'Message'];
     const csvRows = [
       headers.join(','),
-      ...logs.map(log =>
-        [log.timestamp, log.type, `"${log.title}"`, `"${log.message}"`].join(',')
-      ),
+      ...logs.map(log => [log.timestamp, log.type, `"${log.title}"`, `"${log.message}"`].join(',')),
     ];
     const csvStr = csvRows.join('\n');
     const dataBlob = new Blob([csvStr], { type: 'text/csv' });
@@ -210,6 +264,45 @@ function ActivityLogTab({ logs, onClearLogs }) {
             </Box>
           </HStack>
 
+          {/* View Options */}
+          <HStack mt={4} spacing={6} flexWrap="wrap">
+            <FormControl display="flex" alignItems="center" width="auto">
+              <FormLabel htmlFor="timeline-view" mb="0" fontSize="sm">
+                Timeline View
+              </FormLabel>
+              <Switch
+                id="timeline-view"
+                isChecked={timelineView}
+                onChange={e => setTimelineView(e.target.checked)}
+                colorScheme="blue"
+              />
+            </FormControl>
+
+            <FormControl display="flex" alignItems="center" width="auto">
+              <FormLabel htmlFor="group-batch" mb="0" fontSize="sm">
+                Group by Batch
+              </FormLabel>
+              <Switch
+                id="group-batch"
+                isChecked={groupByBatch}
+                onChange={e => setGroupByBatch(e.target.checked)}
+                colorScheme="purple"
+              />
+            </FormControl>
+
+            <FormControl display="flex" alignItems="center" width="auto">
+              <FormLabel htmlFor="auto-scroll" mb="0" fontSize="sm">
+                Auto Scroll
+              </FormLabel>
+              <Switch
+                id="auto-scroll"
+                isChecked={autoScroll}
+                onChange={e => setAutoScroll(e.target.checked)}
+                colorScheme="green"
+              />
+            </FormControl>
+          </HStack>
+
           {/* Stats */}
           <HStack mt={4} spacing={4}>
             <Badge colorScheme="blue">Total: {logs.length}</Badge>
@@ -217,9 +310,7 @@ function ActivityLogTab({ logs, onClearLogs }) {
             <Badge colorScheme="green">
               Success: {logs.filter(l => l.type === 'success').length}
             </Badge>
-            <Badge colorScheme="red">
-              Errors: {logs.filter(l => l.type === 'error').length}
-            </Badge>
+            <Badge colorScheme="red">Errors: {logs.filter(l => l.type === 'error').length}</Badge>
           </HStack>
         </CardBody>
       </Card>
@@ -227,20 +318,12 @@ function ActivityLogTab({ logs, onClearLogs }) {
       {/* Log Entries */}
       <Card>
         <CardBody p={0}>
-          <Box
-            ref={logContainerRef}
-            maxH="600px"
-            overflowY="auto"
-            position="relative"
-            bg="gray.50"
-          >
+          <Box ref={logContainerRef} maxH="600px" overflowY="auto" position="relative" bg="gray.50">
             {filteredLogs.length === 0 ? (
               <Box p={8} textAlign="center">
                 <Icon as={FaInfoCircle} boxSize={12} color="gray.400" mb={4} />
                 <Text color="gray.500" fontSize="lg">
-                  {logs.length === 0
-                    ? 'No activity logs yet'
-                    : 'No logs match your filters'}
+                  {logs.length === 0 ? 'No activity logs yet' : 'No logs match your filters'}
                 </Text>
                 <Text color="gray.400" fontSize="sm" mt={2}>
                   {logs.length === 0
@@ -250,74 +333,177 @@ function ActivityLogTab({ logs, onClearLogs }) {
               </Box>
             ) : (
               <VStack spacing={0} align="stretch" p={4}>
-                {filteredLogs.map((log, index) => {
-                  const { icon: LogIcon, color } = getLogIcon(log.type);
-                  const isLastLog = index === filteredLogs.length - 1;
+                {Object.entries(groupedLogs).map(([groupKey, groupLogs]) => {
+                  const isExpanded = expandedGroups[groupKey] !== false; // Default expanded
 
                   return (
-                    <Box key={log.id}>
-                      <HStack
-                        align="start"
-                        spacing={3}
-                        p={3}
-                        bg={isLastLog ? 'blue.50' : 'white'}
-                        borderRadius="md"
-                        transition="all 0.2s"
-                        _hover={{ bg: 'gray.100' }}
-                      >
-                        {/* Icon */}
-                        <Icon as={LogIcon} color={color} boxSize={5} mt={0.5} />
-
-                        {/* Content */}
-                        <VStack align="start" spacing={1} flex={1}>
-                          <HStack spacing={2}>
-                            <Text fontSize="xs" color="gray.500" fontFamily="mono">
-                              {log.timestamp}
-                            </Text>
-                            <Badge
-                              colorScheme={
-                                log.type === 'success'
-                                  ? 'green'
-                                  : log.type === 'error'
-                                  ? 'red'
-                                  : log.type === 'warning'
-                                  ? 'orange'
-                                  : 'blue'
-                              }
-                              size="sm"
-                            >
-                              {log.type}
-                            </Badge>
-                          </HStack>
-
-                          <Text fontWeight="medium" fontSize="sm">
-                            {log.title}
+                    <Box key={groupKey} mb={groupByBatch ? 4 : 0}>
+                      {/* Group Header (only show if grouping by batch) */}
+                      {groupByBatch && groupKey !== 'All' && (
+                        <HStack
+                          p={3}
+                          bg="purple.100"
+                          borderRadius="md"
+                          cursor="pointer"
+                          onClick={() => toggleGroup(groupKey)}
+                          _hover={{ bg: 'purple.200' }}
+                          mb={2}
+                        >
+                          <Icon
+                            as={isExpanded ? FaChevronDown : FaChevronRight}
+                            color="purple.700"
+                          />
+                          <Icon as={FaLayerGroup} color="purple.700" />
+                          <Text fontWeight="bold" color="purple.700">
+                            {groupKey}
                           </Text>
+                          <Badge colorScheme="purple">{groupLogs.length} logs</Badge>
+                        </HStack>
+                      )}
 
-                          {log.message && (
-                            <Text fontSize="sm" color="gray.600">
-                              {log.message}
-                            </Text>
-                          )}
+                      {/* Log Entries */}
+                      <Collapse in={isExpanded} animateOpacity>
+                        <VStack spacing={0} align="stretch">
+                          {groupLogs.map((log, index) => {
+                            const { icon: LogIcon, color } = getLogIcon(log.type);
+                            const isLastLog = index === groupLogs.length - 1;
+                            const prevLog = index > 0 ? groupLogs[index - 1] : null;
+                            const timeElapsed = getTimeElapsed(log, prevLog);
+                            const hasDetails = log.details && Object.keys(log.details).length > 0;
+                            const isDetailsExpanded = expandedDetails[log.id];
 
-                          {log.details && (
-                            <Box
-                              p={2}
-                              bg="gray.100"
-                              borderRadius="md"
-                              fontSize="xs"
-                              fontFamily="mono"
-                              width="100%"
-                            >
-                              <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                                {JSON.stringify(log.details, null, 2)}
-                              </pre>
-                            </Box>
-                          )}
+                            return (
+                              <Box key={log.id}>
+                                {/* Timeline Connector */}
+                                {timelineView && index > 0 && (
+                                  <HStack spacing={3} pl={3}>
+                                    <Box width="20px" textAlign="center">
+                                      <Box width="2px" height="20px" bg="gray.300" mx="auto" />
+                                    </Box>
+                                    {timeElapsed && (
+                                      <HStack spacing={1}>
+                                        <Icon as={FaClock} color="gray.400" boxSize={3} />
+                                        <Text fontSize="xs" color="gray.500">
+                                          +{timeElapsed}
+                                        </Text>
+                                      </HStack>
+                                    )}
+                                  </HStack>
+                                )}
+
+                                {/* Log Entry */}
+                                <HStack
+                                  align="start"
+                                  spacing={3}
+                                  p={3}
+                                  bg={isLastLog && !groupByBatch ? 'blue.50' : 'white'}
+                                  borderRadius="md"
+                                  transition="all 0.2s"
+                                  _hover={{ bg: 'gray.100' }}
+                                  borderLeft={timelineView ? '4px solid' : 'none'}
+                                  borderLeftColor={color}
+                                >
+                                  {/* Icon/Timeline Dot */}
+                                  {timelineView ? (
+                                    <Box
+                                      width="20px"
+                                      height="20px"
+                                      borderRadius="full"
+                                      bg={color}
+                                      display="flex"
+                                      alignItems="center"
+                                      justifyContent="center"
+                                      flexShrink={0}
+                                    >
+                                      <Icon as={LogIcon} color="white" boxSize={3} />
+                                    </Box>
+                                  ) : (
+                                    <Icon as={LogIcon} color={color} boxSize={5} mt={0.5} />
+                                  )}
+
+                                  {/* Content */}
+                                  <VStack align="start" spacing={1} flex={1}>
+                                    <HStack spacing={2} wrap="wrap">
+                                      <Text fontSize="xs" color="gray.500" fontFamily="mono">
+                                        {log.timestamp}
+                                      </Text>
+                                      <Badge
+                                        colorScheme={
+                                          log.type === 'success'
+                                            ? 'green'
+                                            : log.type === 'error'
+                                              ? 'red'
+                                              : log.type === 'warning'
+                                                ? 'orange'
+                                                : 'blue'
+                                        }
+                                        size="sm"
+                                      >
+                                        {log.type}
+                                      </Badge>
+                                      {/* Show URL icon if log has URL in details */}
+                                      {log.details?.url && (
+                                        <Tooltip label={log.details.url}>
+                                          <Icon as={FaLink} color="blue.500" boxSize={3} />
+                                        </Tooltip>
+                                      )}
+                                    </HStack>
+
+                                    <Text fontWeight="medium" fontSize="sm">
+                                      {log.title}
+                                    </Text>
+
+                                    {log.message && (
+                                      <Text fontSize="sm" color="gray.600">
+                                        {log.message}
+                                      </Text>
+                                    )}
+
+                                    {/* Collapsible Details */}
+                                    {hasDetails && (
+                                      <>
+                                        <Button
+                                          size="xs"
+                                          variant="ghost"
+                                          leftIcon={
+                                            <Icon
+                                              as={
+                                                isDetailsExpanded ? FaChevronDown : FaChevronRight
+                                              }
+                                            />
+                                          }
+                                          onClick={() => toggleDetails(log.id)}
+                                          colorScheme="blue"
+                                        >
+                                          {isDetailsExpanded ? 'Hide' : 'Show'} Details
+                                        </Button>
+
+                                        <Collapse in={isDetailsExpanded} animateOpacity>
+                                          <Box
+                                            p={2}
+                                            bg="gray.100"
+                                            borderRadius="md"
+                                            fontSize="xs"
+                                            fontFamily="mono"
+                                            width="100%"
+                                            mt={2}
+                                          >
+                                            <pre style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                                              {JSON.stringify(log.details, null, 2)}
+                                            </pre>
+                                          </Box>
+                                        </Collapse>
+                                      </>
+                                    )}
+                                  </VStack>
+                                </HStack>
+
+                                {!timelineView && index < groupLogs.length - 1 && <Divider />}
+                              </Box>
+                            );
+                          })}
                         </VStack>
-                      </HStack>
-
-                      {index < filteredLogs.length - 1 && <Divider />}
+                      </Collapse>
                     </Box>
                   );
                 })}

@@ -704,6 +704,7 @@ class PlaywrightService {
    * @param {Function} onProgress - Callback for progress updates
    * @param {Function} onLinkComplete - Callback when each link completes
    * @param {Function} onCredentialsExtracted - Callback when credentials are extracted from browser
+   * @param {Function} onStatusUpdate - Callback for detailed status updates (optional)
    * @returns {Object} - { completed: bool, stopped: bool, results: array, processedCount: number }
    */
   async processBatchSequential(
@@ -712,6 +713,7 @@ class PlaywrightService {
     onProgress,
     onLinkComplete,
     onCredentialsExtracted,
+    onStatusUpdate = null,
   ) {
     const page = await this.ensureBrowserOpen(credentials);
 
@@ -796,6 +798,11 @@ class PlaywrightService {
       }
 
       try {
+        // Emit status: Navigating
+        if (onStatusUpdate) {
+          onStatusUpdate('navigating', `Opening tweet: ${link.url}`, '3/4');
+        }
+
         // Navigate to link with Playwright's more reliable wait
         await page.goto(link.url, {
           waitUntil: 'domcontentloaded',
@@ -822,7 +829,7 @@ class PlaywrightService {
         }
 
         // Auto-reply workflow: Like + Comment
-        await this.autoReplyOnPage(page, link.comment);
+        await this.autoReplyOnPage(page, link.comment, onStatusUpdate);
 
         const result = {
           linkId: link.id,
@@ -928,8 +935,9 @@ class PlaywrightService {
    * Like and reply on current page
    * @param {Page} page - Playwright page object
    * @param {String} comment - Comment text to post
+   * @param {Function} onStatusUpdate - Callback for status updates (optional)
    */
-  async autoReplyOnPage(page, comment) {
+  async autoReplyOnPage(page, comment, onStatusUpdate = null) {
     console.log('Starting auto-reply workflow...');
 
     // Check stop flag before starting
@@ -938,6 +946,9 @@ class PlaywrightService {
     }
 
     // Step 1: Like the post
+    if (onStatusUpdate) {
+      onStatusUpdate('liking', 'Liking the post...', '3/4');
+    }
     await this.likePost(page);
 
     // Check stop flag after liking
@@ -951,6 +962,9 @@ class PlaywrightService {
     // 3. Decide what to comment
     // This delay simulates "thinking time" between like and reply
     console.log('Thinking about reply...');
+    if (onStatusUpdate) {
+      onStatusUpdate('thinking', 'Preparing to reply...', '3/4');
+    }
     await this.randomDelay(2000, 4500);
 
     // Check stop flag after thinking delay
@@ -959,7 +973,10 @@ class PlaywrightService {
     }
 
     // Step 2: Reply to the post
-    await this.replyToPost(page, comment);
+    if (onStatusUpdate) {
+      onStatusUpdate('typing', 'Typing reply...', '3/4');
+    }
+    await this.replyToPost(page, comment, onStatusUpdate);
 
     console.log('Auto-reply workflow completed');
   }
@@ -1034,8 +1051,11 @@ class PlaywrightService {
 
   /**
    * Reply to a post
+   * @param {Page} page - Playwright page object
+   * @param {String} comment - Comment text to post
+   * @param {Function} onStatusUpdate - Callback for status updates (optional)
    */
-  async replyToPost(page, comment) {
+  async replyToPost(page, comment, onStatusUpdate = null) {
     try {
       console.log('Attempting to reply to post (inline mode)...');
 
@@ -1156,6 +1176,9 @@ class PlaywrightService {
       }
 
       // Wait before submitting (human-like pause to review)
+      if (onStatusUpdate) {
+        onStatusUpdate('reviewing', 'Reviewing reply before submitting...', '3/4');
+      }
       await this.randomDelay(2000, 4000);
 
       // Check stop flag before submitting
@@ -1164,6 +1187,9 @@ class PlaywrightService {
       }
 
       // Find and click submit button
+      if (onStatusUpdate) {
+        onStatusUpdate('submitting', 'Submitting reply...', '3/4');
+      }
       const submitButton = await this.waitForEnabledSubmitButton(page);
 
       if (submitButton) {

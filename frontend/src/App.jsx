@@ -199,6 +199,37 @@ function App() {
       });
     },
 
+    'link:status': data => {
+      console.log('Link status update:', data);
+      setCurrentBatchDetails(prev => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          currentLinkStatus: {
+            status: data.status,
+            message: data.message,
+            step: data.step,
+            updatedAt: new Date(),
+          },
+        };
+      });
+
+      // Add to activity log for important status updates
+      const importantStatuses = ['navigating', 'liking', 'typing', 'submitting', 'completed', 'failed'];
+      if (importantStatuses.includes(data.status)) {
+        const logType =
+          data.status === 'completed' ? 'success' :
+          data.status === 'failed' ? 'error' : 'info';
+
+        addLog(
+          logType,
+          `[Batch ${data.batchNumber}] Link Status: ${data.status}`,
+          data.message,
+          { linkIndex: data.linkIndex, step: data.step }
+        );
+      }
+    },
+
     'link:success': data => {
       console.log('Link success:', data);
       addLog('success', 'Link Processed Successfully', data.url || 'Link completed', data);

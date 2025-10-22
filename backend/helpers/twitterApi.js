@@ -31,7 +31,7 @@ export function parseCookies(cookiesInput) {
         .map(([key, value]) => `${key}=${value}`)
         .join('; ');
       const ct0 = parsed.ct0 || '';
-      console.log('📝 Parsed cookies from object format:', Object.keys(parsed));
+      // console.log('📝 Parsed cookies from object format:', Object.keys(parsed));
       return { cookieString, ct0 };
     }
   } catch (e) {
@@ -122,14 +122,14 @@ export async function fetchTweetData(tweetId, cookies, bearerToken, retries = 2)
   const { cookieString, ct0 } = parseCookies(cookies);
   const csrfToken = ct0;
 
-  console.log('🔐 Twitter API Request Debug:', {
-    tweetId,
-    hasBearerToken: !!bearerToken,
-    bearerTokenFormat: bearerToken?.startsWith('Bearer ') ? 'Valid' : 'Missing "Bearer " prefix',
-    bearerTokenLength: bearerToken?.length || 0,
-    hasCsrfToken: !!csrfToken,
-    cookieStringLength: cookieString?.length || 0,
-  });
+  // console.log('🔐 Twitter API Request Debug:', {
+  //   tweetId,
+  //   hasBearerToken: !!bearerToken,
+  //   bearerTokenFormat: bearerToken?.startsWith('Bearer ') ? 'Valid' : 'Missing "Bearer " prefix',
+  //   bearerTokenLength: bearerToken?.length || 0,
+  //   hasCsrfToken: !!csrfToken,
+  //   cookieStringLength: cookieString?.length || 0,
+  // });
 
   const url = `https://x.com/i/api/graphql/URPP6YZ5eDCjdVMSREn4gg/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(features))}&fieldToggles=${encodeURIComponent(JSON.stringify(fieldToggles))}`;
 

@@ -14,7 +14,7 @@ router.get('/current', (req, res) => {
       return res.json({
         success: true,
         currentBatch: null,
-        message: 'No batch currently processing'
+        message: 'No batch currently processing',
       });
     }
 
@@ -24,36 +24,42 @@ router.get('/current', (req, res) => {
       return res.json({
         success: true,
         currentBatch: null,
-        message: 'Current batch not found'
+        message: 'Current batch not found',
       });
     }
 
     const progress = {
       current: currentBatch.currentLinkIndex + 1,
       total: batch.links.length,
-      percentage: Math.round(((currentBatch.currentLinkIndex + 1) / batch.links.length) * 100)
+      percentage: Math.round(((currentBatch.currentLinkIndex + 1) / batch.links.length) * 100),
     };
+
+    // Get the current link being processed
+    const currentLink = batch.links[currentBatch.currentLinkIndex] || null;
 
     res.json({
       success: true,
       currentBatch: {
         ...currentBatch,
+        currentLink: currentLink, // Add current link object
+        currentLinkStatus: currentBatch.currentLinkStatus || null, // Add detailed status
         batch: {
           batchId: batch.batchId,
           batchNumber: batch.batchNumber,
           links: batch.links,
           status: batch.status,
           successCount: batch.successCount,
-          failedCount: batch.failedCount
+          failedCount: batch.failedCount,
+          results: batch.results || [], // Include results for status tracking
         },
-        progress
-      }
+        progress,
+      },
     });
   } catch (error) {
     console.error('Error getting current batch:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -74,19 +80,19 @@ router.get('/history', (req, res) => {
       successCount: batch.successCount,
       failedCount: batch.failedCount,
       startTime: batch.startTime,
-      endTime: batch.endTime
+      endTime: batch.endTime,
     }));
 
     res.json({
       success: true,
       batches: history,
-      totalBatches: batches.length
+      totalBatches: batches.length,
     });
   } catch (error) {
     console.error('Error getting batch history:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -105,7 +111,7 @@ router.get('/:batchId', (req, res) => {
     if (!batch) {
       return res.status(404).json({
         success: false,
-        message: 'Batch not found'
+        message: 'Batch not found',
       });
     }
 
@@ -117,16 +123,16 @@ router.get('/:batchId', (req, res) => {
           id: link.id,
           url: link.url,
           content: link.content,
-          comment: link.comment
+          comment: link.comment,
         })),
-        results: batch.results
-      }
+        results: batch.results,
+      },
     });
   } catch (error) {
     console.error('Error getting batch details:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });

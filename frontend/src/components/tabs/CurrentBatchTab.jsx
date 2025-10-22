@@ -173,7 +173,8 @@ function CurrentBatchTab({
               <Box>
                 <AlertTitle>Ready to Start</AlertTitle>
                 <AlertDescription>
-                  Click "Open Browser" to begin. Settings will be automatically synced before opening.
+                  Click "Open Browser" to begin. Settings will be automatically synced before
+                  opening.
                 </AlertDescription>
               </Box>
             </Alert>
@@ -216,9 +217,39 @@ function CurrentBatchTab({
             {/* Current Link Processing */}
             {currentBatchDetails.currentLink && (
               <Box p={4} bg="blue.50" borderRadius="md" mb={4}>
-                <Text fontSize="sm" fontWeight="medium" mb={2} color="blue.700">
-                  Currently Processing:
-                </Text>
+                <HStack justify="space-between" mb={2}>
+                  <Text fontSize="sm" fontWeight="medium" color="blue.700">
+                    Currently Processing:
+                  </Text>
+                  {currentBatchDetails.currentLinkStatus?.step && (
+                    <Badge colorScheme="purple" fontSize="xs">
+                      {currentBatchDetails.currentLinkStatus.step}
+                    </Badge>
+                  )}
+                </HStack>
+
+                {/* Status Message */}
+                {currentBatchDetails.currentLinkStatus && (
+                  <HStack mb={2} spacing={2}>
+                    <Badge
+                      colorScheme={
+                        currentBatchDetails.currentLinkStatus.status === 'completed'
+                          ? 'green'
+                          : currentBatchDetails.currentLinkStatus.status === 'failed'
+                            ? 'red'
+                            : 'blue'
+                      }
+                      fontSize="xs"
+                    >
+                      {currentBatchDetails.currentLinkStatus.status.replace(/_/g, ' ')}
+                    </Badge>
+                    <Text fontSize="xs" color="gray.600">
+                      {currentBatchDetails.currentLinkStatus.message}
+                    </Text>
+                  </HStack>
+                )}
+
+                {/* URL */}
                 <Link
                   href={currentBatchDetails.currentLink.url}
                   isExternal
