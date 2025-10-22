@@ -779,6 +779,36 @@ function App() {
     } catch (error) {
       console.error('Error opening browser:', error);
       const errorMessage = error.response?.data?.message || 'Failed to open browser';
+
+      // Auto-close browser on error to prevent zombie state
+      console.log('🔄 Auto-closing browser due to error...');
+      try {
+        await axios.post(
+          `${API_BASE}/browser/close`,
+          {},
+          {
+            withCredentials: true,
+          },
+        );
+        console.log('✅ Browser auto-closed successfully');
+      } catch (closeError) {
+        console.error('⚠️ Failed to auto-close browser:', closeError);
+      }
+
+      // Update UI state to reflect browser is closed
+      setBrowserStatus({ isOpen: false, isLoggedIn: false, currentUrl: null });
+
+      // Log error to activity log
+      addLog(
+        'error',
+        '❌ Browser Open Failed',
+        errorMessage,
+        {
+          error: error.message,
+          timestamp: new Date().toISOString(),
+        },
+      );
+
       toast({
         title: 'Error',
         description: errorMessage,
