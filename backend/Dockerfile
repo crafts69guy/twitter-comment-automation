@@ -1,7 +1,7 @@
 # Backend Dockerfile
 FROM node:18-alpine
 
-# Install necessary dependencies for Puppeteer
+# Install necessary dependencies for Playwright
 RUN apk add --no-cache \
     chromium \
     nss \
@@ -11,9 +11,9 @@ RUN apk add --no-cache \
     ca-certificates \
     ttf-freefont
 
-# Set Puppeteer to use the installed Chromium
-ENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium-browser
-ENV PUPPETEER_SKIP_CHROMIUM_DOWNLOAD=true
+# Set Playwright to use the installed Chromium
+ENV PLAYWRIGHT_EXECUTABLE_PATH=/usr/bin/chromium-browser
+ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 # Create app directory
 WORKDIR /app

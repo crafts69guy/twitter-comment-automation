@@ -1,10 +1,11 @@
-import puppeteer from 'puppeteer';
+import { chromium } from 'playwright';
 import fs from 'fs';
 
-class PuppeteerServiceV2 {
+class PlaywrightService {
   constructor() {
     this.browser = null;
-    this.currentPage = null; // Single persistent tab
+    this.context = null;
+    this.currentPage = null;
     this.isProcessing = false;
     this.shouldPause = false;
     this.shouldStop = false;
@@ -19,10 +20,12 @@ class PuppeteerServiceV2 {
 
         if (!isConnected) {
           this.browser = null;
+          this.context = null;
           this.currentPage = null;
         }
       } catch (error) {
         this.browser = null;
+        this.context = null;
         this.currentPage = null;
         isActuallyOpen = false;
       }
@@ -37,7 +40,7 @@ class PuppeteerServiceV2 {
   async getCurrentUrl() {
     if (!this.currentPage) return null;
     try {
-      return await this.currentPage.url();
+      return this.currentPage.url();
     } catch {
       return null;
     }
@@ -56,36 +59,20 @@ class PuppeteerServiceV2 {
       return;
     }
 
-    let launchOptions = {
+    const launchOptions = {
       headless: false,
       args: [
         '--no-sandbox',
         '--disable-setuid-sandbox',
         '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
         '--disable-blink-features=AutomationControlled',
-        '--window-size=1920,1080',
-        '--disable-web-security',
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--allow-running-insecure-content',
-        '--no-default-browser-check',
-        '--disable-infobars',
-        '--exclude-switches=enable-automation',
-        '--enable-features=NetworkService,NetworkServiceInProcess',
-        '--disable-background-timer-throttling',
-        '--disable-backgrounding-occluded-windows',
-        '--disable-renderer-backgrounding',
-        '--disable-features=TranslateUI',
       ],
     };
 
     // Check if running in Docker (Alpine Linux with Chromium)
-    if (process.env.PUPPETEER_EXECUTABLE_PATH) {
-      console.log('Using Docker Chromium from env:', process.env.PUPPETEER_EXECUTABLE_PATH);
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+    if (process.env.PLAYWRIGHT_EXECUTABLE_PATH) {
+      console.log('Using Docker Chromium from env:', process.env.PLAYWRIGHT_EXECUTABLE_PATH);
+      launchOptions.executablePath = process.env.PLAYWRIGHT_EXECUTABLE_PATH;
     } else {
       // Auto-detect Chrome/Chromium path based on platform
       const platform = process.platform;
@@ -100,23 +87,24 @@ class PuppeteerServiceV2 {
       }
 
       if (!launchOptions.executablePath) {
-        console.log('No Chrome found, using default Puppeteer Chromium');
+        console.log('Using default Playwright Chromium');
       }
     }
 
-    console.log('Launching browser with options:', launchOptions);
-    this.browser = await puppeteer.launch(launchOptions);
-    this.currentPage = await this.browser.newPage();
+    console.log('Launching browser with Playwright...');
+    this.browser = await chromium.launch(launchOptions);
 
-    // Set viewport
-    await this.currentPage.setViewport({ width: 1920, height: 1080 });
+    // Create browser context with realistic settings
+    this.context = await this.browser.newContext({
+      viewport: { width: 1920, height: 1080 },
+      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      locale: 'en-US',
+      timezoneId: 'America/New_York',
+    });
 
-    // Set user agent to mimic real browser
-    await this.currentPage.setUserAgent(
-      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-    );
+    this.currentPage = await this.context.newPage();
 
-    console.log('Browser initialized with single persistent tab');
+    console.log('Browser initialized with Playwright');
   }
 
   getChromePaths(platform) {
@@ -183,16 +171,16 @@ class PuppeteerServiceV2 {
       }
 
       try {
-        // Navigate to link (reuse same tab)
+        // Navigate to link with Playwright's more reliable wait
         await page.goto(link.url, {
-          waitUntil: 'networkidle2',
+          waitUntil: 'networkidle',
           timeout: 30000
         });
 
         console.log(`Navigated to: ${link.url}`);
 
         // Wait for page to settle
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await page.waitForTimeout(3000);
 
         // Auto-reply workflow: Like + Comment
         await this.autoReplyOnPage(page, link.comment);
@@ -232,7 +220,7 @@ class PuppeteerServiceV2 {
       // Delay between links to avoid rate limiting
       if (i < links.length - 1) {
         console.log('Waiting 2 seconds before next link...');
-        await new Promise(resolve => setTimeout(resolve, 2000));
+        await page.waitForTimeout(2000);
       }
     }
 
@@ -249,7 +237,7 @@ class PuppeteerServiceV2 {
 
   /**
    * Like and reply on current page
-   * @param {Page} page - Puppeteer page object
+   * @param {Page} page - Playwright page object
    * @param {String} comment - Comment text to post
    */
   async autoReplyOnPage(page, comment) {
@@ -272,30 +260,30 @@ class PuppeteerServiceV2 {
       console.log('Attempting to like post...');
 
       // Pre-delay before liking
-      await new Promise(resolve => setTimeout(resolve, 2500));
+      await page.waitForTimeout(2500);
 
-      // Find the first cell container
-      const firstCell = await page.waitForSelector('[data-testid="cellInnerDiv"]', {
+      // Wait for first cell container
+      await page.waitForSelector('[data-testid="cellInnerDiv"]', {
         timeout: 10000
       });
 
       // Check if already liked
-      const isLiked = await page.$('[data-testid="unlike"]');
+      const isLiked = await page.locator('[data-testid="unlike"]').count() > 0;
 
       if (isLiked) {
         console.log('Post already liked, skipping...');
         return;
       }
 
-      // Find and click like button
-      const likeButton = await page.$('[data-testid="like"]');
-
-      if (likeButton) {
+      // Find and click like button using Playwright's auto-wait
+      const likeButton = page.locator('[data-testid="like"]').first();
+      
+      if (await likeButton.count() > 0) {
         await likeButton.click();
         console.log('✅ Post liked');
 
         // Post-like delay
-        await new Promise(resolve => setTimeout(resolve, 5000));
+        await page.waitForTimeout(5000);
       } else {
         console.log('Like button not found');
       }
@@ -314,36 +302,27 @@ class PuppeteerServiceV2 {
       console.log('Attempting to reply to post...');
 
       // Click reply button to open reply textarea
-      const replyButton = await page.waitForSelector('[data-testid="reply"]', {
-        timeout: 10000
-      });
-
+      const replyButton = page.locator('[data-testid="reply"]').first();
       await replyButton.click();
       console.log('Clicked reply button');
 
       // Wait for reply textarea to appear
-      const textarea = await page.waitForSelector(
-        '[data-testid="tweetTextarea_0"][role="textbox"]',
-        { timeout: 10000 }
-      );
-
+      const textarea = page.locator('[data-testid="tweetTextarea_0"][role="textbox"]');
+      await textarea.waitFor({ timeout: 10000 });
       console.log('Reply textarea found');
 
       // Click textarea to focus
       await textarea.click();
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      await page.waitForTimeout(1000);
 
-      // Type comment character by character (simulate natural typing)
+      // Type comment with natural timing using Playwright's type
       console.log(`Typing comment: "${comment}"`);
-      for (const char of comment) {
-        await textarea.type(char);
-        await new Promise(resolve => setTimeout(resolve, 30)); // 30ms delay between chars
-      }
+      await textarea.type(comment, { delay: 30 });
 
       console.log('Comment typed successfully');
 
       // Wait before submitting
-      await new Promise(resolve => setTimeout(resolve, 3000));
+      await page.waitForTimeout(3000);
 
       // Find and click submit button
       const submitButton = await this.waitForEnabledSubmitButton(page);
@@ -353,7 +332,7 @@ class PuppeteerServiceV2 {
         console.log('✅ Reply submitted');
 
         // Final delay to ensure reply is posted
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await page.waitForTimeout(3000);
       } else {
         throw new Error('Submit button not found or not enabled');
       }
@@ -368,31 +347,32 @@ class PuppeteerServiceV2 {
    * Wait for submit button to be enabled
    */
   async waitForEnabledSubmitButton(page, maxWaitTime = 15000) {
-    const startTime = Date.now();
+    try {
+      const submitButton = page.locator('button[data-testid="tweetButtonInline"]');
+      
+      // Wait for button to be visible and enabled
+      await submitButton.waitFor({ 
+        state: 'visible',
+        timeout: maxWaitTime 
+      });
+      
+      // Wait for button to be enabled (not disabled)
+      await page.waitForFunction(
+        (selector) => {
+          const btn = document.querySelector(selector);
+          return btn && !btn.disabled;
+        },
+        'button[data-testid="tweetButtonInline"]',
+        { timeout: maxWaitTime }
+      );
 
-    while (Date.now() - startTime < maxWaitTime) {
-      try {
-        const submitButton = await page.$('button[data-testid="tweetButtonInline"]');
+      console.log('Submit button is enabled');
+      return submitButton;
 
-        if (submitButton) {
-          const isDisabled = await page.evaluate(btn => btn.disabled, submitButton);
-
-          if (!isDisabled) {
-            console.log('Submit button is enabled');
-            return submitButton;
-          }
-        }
-
-        // Wait 500ms before checking again
-        await new Promise(resolve => setTimeout(resolve, 500));
-
-      } catch (error) {
-        console.log('Waiting for submit button...');
-      }
+    } catch (error) {
+      console.error('Submit button did not become enabled within timeout');
+      return null;
     }
-
-    console.error('Submit button did not become enabled within timeout');
-    return null;
   }
 
   /**
@@ -415,11 +395,17 @@ class PuppeteerServiceV2 {
    * Close browser
    */
   async closeBrowser() {
+    if (this.context) {
+      console.log('Closing browser context...');
+      await this.context.close();
+      this.context = null;
+      this.currentPage = null;
+    }
+    
     if (this.browser) {
       console.log('Closing browser...');
       await this.browser.close();
       this.browser = null;
-      this.currentPage = null;
       console.log('Browser closed');
     }
   }
@@ -431,8 +417,8 @@ class PuppeteerServiceV2 {
     const page = await this.ensureBrowserOpen();
 
     try {
-      await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
-      await new Promise(resolve => setTimeout(resolve, 8000));
+      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.waitForTimeout(8000);
 
       const tweetData = await page.evaluate(() => {
         const selectors = {
@@ -496,5 +482,5 @@ class PuppeteerServiceV2 {
 }
 
 // Singleton instance
-const puppeteerServiceV2 = new PuppeteerServiceV2();
-export default puppeteerServiceV2;
+const playwrightService = new PlaywrightService();
+export default playwrightService;

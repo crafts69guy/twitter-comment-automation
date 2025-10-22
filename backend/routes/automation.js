@@ -1,6 +1,6 @@
 import express from 'express';
 import AutomationController from '../controllers/automationController.js';
-import puppeteerService from '../services/puppeteerService.js';
+import playwrightService from '../services/playwrightService.js';
 
 const router = express.Router();
 
@@ -16,7 +16,7 @@ const getController = req => {
   if (!activeControllers.has(userId)) {
     activeControllers.set(
       userId,
-      new AutomationController(session, puppeteerService, emitSSE, userId),
+      new AutomationController(session, playwrightService, emitSSE, userId),
     );
   }
 

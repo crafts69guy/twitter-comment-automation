@@ -1,5 +1,5 @@
 import express from 'express';
-import puppeteerService from '../services/puppeteerService.js';
+import playwrightService from '../services/playwrightService.js';
 
 const router = express.Router();
 
@@ -9,7 +9,7 @@ const router = express.Router();
  */
 router.get('/status', async (req, res) => {
   try {
-    const status = await puppeteerService.getBrowserStatus();
+    const status = await playwrightService.getBrowserStatus();
 
     // Update session browser status
     req.userSession.browser.isOpen = status.isOpen;
@@ -36,9 +36,9 @@ router.get('/status', async (req, res) => {
  */
 router.post('/open', async (req, res) => {
   try {
-    await puppeteerService.initialize();
+    await playwrightService.initialize();
 
-    const status = await puppeteerService.getBrowserStatus();
+    const status = await playwrightService.getBrowserStatus();
 
     // Update session
     req.userSession.browser.isOpen = true;
@@ -64,7 +64,7 @@ router.post('/open', async (req, res) => {
  */
 router.post('/close', async (req, res) => {
   try {
-    await puppeteerService.closeBrowser();
+    await playwrightService.closeBrowser();
 
     // Update session
     req.userSession.browser.isOpen = false;

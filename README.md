@@ -1,21 +1,21 @@
 # Twitter Comment Automation
 
-A full-stack web application that automates Twitter comment generation using AI, with Google Sheets integration and Puppeteer web scraping.
+A full-stack web application that automates Twitter comment generation using AI, with Google Sheets integration and Playwright web automation.
 
 ![Twitter Comment Automation](https://img.shields.io/badge/Status-Complete-brightgreen)
 ![React](https://img.shields.io/badge/React-18.2.0-blue)
 ![Node.js](https://img.shields.io/badge/Node.js-Express-green)
-![Puppeteer](https://img.shields.io/badge/Puppeteer-Latest-orange)
+![Playwright](https://img.shields.io/badge/Playwright-Latest-orange)
 
 ## 🚀 Features
 
 - **📊 Google Sheets Integration**: Fetch Twitter URLs from spreadsheets
-- **🕷️ Parallel Web Scraping**: 5 concurrent Puppeteer tabs for efficient Twitter scraping
-- **🤖 AI-Powered Comments**: Generate contextual comments using OpenAI GPT-4 or Anthropic Claude
+- **🎭 Modern Web Automation**: Reliable browser automation with Playwright
+- **🤖 AI-Powered Comments**: Generate contextual comments using OpenAI GPT-4, Anthropic Claude, or Google Gemini
 - **💼 Session Management**: Secure user sessions with isolated data storage
 - **🎨 Modern UI**: Beautiful desktop-optimized interface with Chakra UI
-- **⚡ Bulk Operations**: Generate comments for multiple posts simultaneously
-- **🔄 Real-time Updates**: Live status tracking and progress updates
+- **⚡ Batch Processing**: Automated sequential processing with pause/resume controls
+- **🔄 Real-time Updates**: Live status tracking and progress updates via SSE
 
 ## 🛠️ Tech Stack
 
@@ -30,8 +30,8 @@ A full-stack web application that automates Twitter comment generation using AI,
 - ES6 modules
 - Express Sessions for state management
 - Google Sheets API
-- Puppeteer for web scraping
-- OpenAI & Anthropic SDKs
+- Playwright for web automation
+- OpenAI, Anthropic & Google Gemini SDKs
 
 ## 📦 Installation
 
@@ -65,7 +65,8 @@ A full-stack web application that automates Twitter comment generation using AI,
    GOOGLE_SHEETS_API_KEY=your-google-api-key
    OPENAI_API_KEY=your-openai-key
    ANTHROPIC_API_KEY=your-anthropic-key
-   PUPPETEER_HEADLESS=true
+   GEMINI_API_KEY=your-gemini-key
+   PLAYWRIGHT_HEADLESS=false
    ```
 
 4. **Start the backend:**
@@ -101,46 +102,63 @@ A full-stack web application that automates Twitter comment generation using AI,
 
 ### 1. Configure Settings
 - Navigate to the Settings tab
-- Enter your Google Sheets URL
-- Select AI provider (OpenAI or Anthropic)
-- Enter your API key
+- Enter your Google Sheets URL (with Twitter URLs in column A, optional content in column B)
+- Configure batch size and interval between batches
+- Select AI provider (OpenAI, Anthropic, or Google Gemini)
+- Add Twitter API credentials (cookies and bearer token)
 - Save configuration
 
-### 2. Fetch Posts
-- Go to Posts Management tab
-- Click "Fetch Posts" to load Twitter URLs from your Google Sheet
-- Posts will appear in the table
+### 2. Start Automation
+- Click "Start Automation" to begin the process
+- The system will:
+  1. Fetch links from Google Sheets
+  2. Create batches automatically
+  3. Fetch tweet content via Twitter API
+  4. Generate AI comments for each batch
+  5. Process tweets with Playwright (like + reply)
 
-### 3. Scrape Content
-- Click "Scrape Content" to extract actual Twitter post content
-- This uses 5 parallel Puppeteer browsers for efficiency
+### 3. Monitor Progress
+- View real-time batch progress
+- See current tweet being processed
+- Monitor success/failure counts
+- View countdown to next batch
 
-### 4. Generate Comments
-- Click individual chat icons (💬) to generate AI comments for specific posts
-- Or use "Generate All Comments" for bulk processing
-- Comments are contextually relevant based on post content
+### 4. Control Automation
+- **Pause**: Temporarily pause processing
+- **Resume**: Continue from where you left off
+- **Stop**: Stop automation completely
+- **Force Next**: Skip to next batch immediately
 
-### 5. Reply to Posts
-- Click the green check icon (✅) on posts with generated comments
-- This opens Twitter in a new tab for you to reply
-- Status automatically updates to "Replied"
+### 5. Handle Failed Links
+- View failed links in the Failed Links tab
+- Retry failed links manually
+- Clear failed links history
 
 ## 🔧 API Endpoints
 
-### Google Sheets
-- `POST /api/google-sheets/fetch` - Fetch posts from Google Sheets
+### Automation
+- `POST /api/automation/start` - Start automation process
+- `POST /api/automation/stop` - Stop automation
+- `POST /api/automation/pause` - Pause automation
+- `POST /api/automation/resume` - Resume automation
+- `POST /api/automation/force-next` - Skip to next batch
+- `POST /api/automation/sync-sheets` - Sync with Google Sheets
+- `GET /api/automation/status` - Get automation status
+- `POST /api/automation/update-settings` - Update settings
 
-### Scraper
-- `POST /api/scraper/scrape-posts` - Real Puppeteer scraping
-- `POST /api/scraper/scrape-demo` - Demo mode with mock data
+### Browser Control
+- `POST /api/browser/open` - Open browser
+- `POST /api/browser/close` - Close browser
+- `GET /api/browser/status` - Get browser status
 
-### AI Generation
-- `POST /api/ai/generate` - Real AI generation (OpenAI/Claude)
-- `POST /api/ai/generate-demo` - Demo contextual comments
+### Batches
+- `GET /api/batches` - Get all batches
+- `GET /api/batches/:batchId` - Get specific batch
 
-### Posts Management
-- `GET /api/posts/current` - Get current session posts
-- `PATCH /api/posts/:postId` - Update specific post
+### Failed Links
+- `GET /api/failed-links` - Get all failed links
+- `POST /api/failed-links/retry` - Retry failed links
+- `POST /api/failed-links/clear` - Clear failed links
 
 ## 🚦 Production Deployment
 
@@ -151,7 +169,7 @@ A full-stack web application that automates Twitter comment generation using AI,
    NODE_ENV=production
    PORT=3001
    SESSION_SECRET=secure-random-string
-   PUPPETEER_HEADLESS=true
+   PLAYWRIGHT_HEADLESS=false
    ```
 
 2. **Install production dependencies only:**
@@ -174,41 +192,63 @@ A full-stack web application that automates Twitter comment generation using AI,
 
 2. **Serve with nginx or deploy to Vercel/Netlify**
 
-## 🔍 Development Features
+## 🔍 Key Features
 
-### Demo Mode
-The application includes comprehensive demo modes for testing without external APIs:
+### Batch Processing
+- Automatic batch creation from Google Sheets
+- Configurable batch size (default: 15 tweets)
+- Configurable interval between batches (default: 20 minutes)
+- Sequential processing with single browser tab
+- Pause/Resume/Stop controls
 
-- **Mock Google Sheets data**: Simulated spreadsheet responses
-- **Demo scraping**: Contextual fake Twitter content
-- **AI demo comments**: Smart responses based on content analysis
-- **No API limits**: Test unlimited without consuming quotas
+### AI Comment Generation
+- Support for multiple AI providers:
+  - OpenAI (GPT-4)
+  - Anthropic (Claude)
+  - Google Gemini
+- Bulk comment generation for efficiency
+- Custom prompt support
+- 280 character limit for Twitter
 
-### Real Integration
-Switch to real APIs by:
-- Uncommenting production code blocks
-- Adding valid API keys
-- Enabling real Puppeteer scraping
-- Connecting to actual Google Sheets
+### Browser Automation
+- Playwright for reliable automation
+- Single persistent tab for all operations
+- Auto-wait for elements
+- Natural typing simulation
+- Like + Reply workflow
 
 ## 🐛 Troubleshooting
 
 ### Common Issues
 
-1. **Puppeteer fails to launch:**
+1. **Playwright browser fails to launch:**
    ```bash
+   # Install Playwright browsers
+   npx playwright install chromium
+   
    # Install required dependencies (Ubuntu/Debian)
-   sudo apt-get install -y gconf-service libasound2 libatk1.0-0 libc6 libcairo2
+   npx playwright install-deps chromium
    ```
 
 2. **Google Sheets permission denied:**
    - Ensure service account has read access to the sheet
    - Share sheet with service account email
+   - Check GOOGLE_SERVICE_ACCOUNT_PATH in .env
 
 3. **AI API errors:**
-   - Check API key validity
+   - Check API key validity in .env
    - Verify sufficient credits/quota
    - Ensure correct model names
+
+4. **Twitter API errors:**
+   - Configure Twitter cookies and bearer token in settings
+   - Required for fetching tweet content
+   - See TWITTER_API_REQUIRED_UPDATE.md for details
+
+5. **Browser automation issues:**
+   - Make sure browser is open before starting automation
+   - Check browser status in UI
+   - Use "Open Browser" button if needed
 
 ## 📄 License
 

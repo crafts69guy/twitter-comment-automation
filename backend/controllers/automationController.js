@@ -4,9 +4,9 @@ import { generateBulkComments } from '../services/aiService.js';
 import { fetchTweetContentBatch } from '../helpers/twitterApi.js';
 
 class AutomationController {
-  constructor(session, puppeteerService, emitSSE, userId) {
+  constructor(session, playwrightService, emitSSE, userId) {
     this.session = session;
-    this.puppeteer = puppeteerService;
+    this.playwright = playwrightService;
     this.emitSSE = emitSSE;
     this.userId = userId;
     this.countdownInterval = null;
@@ -451,8 +451,8 @@ class AutomationController {
       return;
     }
 
-    // Step 3: Process batch with Puppeteer (only valid links)
-    const result = await this.puppeteer.processBatchSequential(
+    // Step 3: Process batch with Playwright (only valid links)
+    const result = await this.playwright.processBatchSequential(
       linksToProcess,
       progress => {
         // Progress callback
@@ -641,7 +641,7 @@ class AutomationController {
   async pause() {
     console.log('[AutomationController] Pausing automation...');
     this.session.automation.isPaused = true;
-    this.puppeteer.setPause(true);
+    this.playwright.setPause(true);
 
     if (this.countdownInterval) {
       clearInterval(this.countdownInterval);
@@ -663,7 +663,7 @@ class AutomationController {
   async resume() {
     console.log('[AutomationController] Resuming automation...');
     this.session.automation.isPaused = false;
-    this.puppeteer.setPause(false);
+    this.playwright.setPause(false);
 
     this.emitSSE(this.userId, 'automation:resumed', {
       currentBatch: this.session.currentBatch,
@@ -684,7 +684,7 @@ class AutomationController {
     // Set flags first to prevent any new batches from starting
     this.session.automation.isActive = false;
     this.session.automation.isPaused = false;
-    this.puppeteer.setStop(true);
+    this.playwright.setStop(true);
 
     // Clear countdown interval to prevent next batch from scheduling
     if (this.countdownInterval) {
@@ -708,7 +708,7 @@ class AutomationController {
 
     // Wait a bit for current processing to stop, then reset flag
     await new Promise(resolve => setTimeout(resolve, 2000));
-    this.puppeteer.setStop(false);
+    this.playwright.setStop(false);
 
     console.log('[AutomationController] Automation stopped successfully');
 
@@ -748,7 +748,7 @@ class AutomationController {
       });
 
       // Stop current processing
-      this.puppeteer.setStop(true);
+      this.playwright.setStop(true);
 
       // Wait a bit for processing to stop
       await new Promise(resolve => setTimeout(resolve, 1000));
@@ -764,7 +764,7 @@ class AutomationController {
       this.session.currentBatch = null;
 
       // Reset stop flag
-      this.puppeteer.setStop(false);
+      this.playwright.setStop(false);
 
       this.emitSSE(this.userId, 'batch:skipped', {
         batchNumber: currentBatch.batchNumber,

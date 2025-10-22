@@ -1,5 +1,5 @@
 import express from 'express';
-import puppeteerService from '../services/puppeteerService.js';
+import playwrightService from '../services/playwrightService.js';
 
 const router = express.Router();
 
@@ -68,18 +68,18 @@ router.post('/retry', async (req, res) => {
 
     for (const link of linksToRetry) {
       try {
-        const page = await puppeteerService.ensureBrowserOpen();
+        const page = await playwrightService.ensureBrowserOpen();
 
         // Navigate to link
         await page.goto(link.url, {
-          waitUntil: 'networkidle2',
+          waitUntil: 'networkidle',
           timeout: 30000
         });
 
-        await new Promise(resolve => setTimeout(resolve, 3000));
+        await page.waitForTimeout(3000);
 
         // Auto-reply
-        await puppeteerService.autoReplyOnPage(page, link.comment);
+        await playwrightService.autoReplyOnPage(page, link.comment);
 
         results.push({
           linkId: link.linkId,
