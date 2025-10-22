@@ -147,6 +147,128 @@ class PlaywrightService {
   }
 
   /**
+   * Generate Gaussian random number (normal distribution)
+   * More realistic than uniform random for human behavior
+   */
+  gaussianRandom(mean, stdDev) {
+    let u1 = 0,
+      u2 = 0;
+    while (u1 === 0) u1 = Math.random(); // Converting [0,1) to (0,1)
+    while (u2 === 0) u2 = Math.random();
+
+    const z0 = Math.sqrt(-2.0 * Math.log(u1)) * Math.cos(2.0 * Math.PI * u2);
+    return Math.max(0, z0 * stdDev + mean); // Ensure non-negative
+  }
+
+  /**
+   * Get typing delay based on character type
+   * Different character types have different typing speeds
+   */
+  getCharacterTypingDelay(char, previousChar) {
+    const baseDelay = 80; // Base delay in ms
+
+    // Letter characters: fastest
+    if (/[a-zA-Z]/.test(char)) {
+      return this.gaussianRandom(baseDelay, 20);
+    }
+
+    // Numbers: slightly slower
+    if (/[0-9]/.test(char)) {
+      return this.gaussianRandom(baseDelay + 30, 25);
+    }
+
+    // Space after punctuation: longer pause (thinking)
+    if (char === ' ' && /[.,!?;:]/.test(previousChar)) {
+      return this.gaussianRandom(baseDelay + 150, 50);
+    }
+
+    // Regular space: normal
+    if (char === ' ') {
+      return this.gaussianRandom(baseDelay + 20, 15);
+    }
+
+    // Punctuation: slower (need to think)
+    if (/[.,!?;:]/.test(char)) {
+      return this.gaussianRandom(baseDelay + 80, 30);
+    }
+
+    // Special characters: slowest
+    if (/[^\w\s]/.test(char)) {
+      return this.gaussianRandom(baseDelay + 100, 40);
+    }
+
+    // Default
+    return this.gaussianRandom(baseDelay, 20);
+  }
+
+  /**
+   * Get nearby key on QWERTY keyboard for realistic typo simulation
+   */
+  getNearbyKey(char) {
+    const keyboardMap = {
+      q: ['w', 'a', 's'],
+      w: ['q', 'e', 's', 'd'],
+      e: ['w', 'r', 'd', 'f'],
+      r: ['e', 't', 'f', 'g'],
+      t: ['r', 'y', 'g', 'h'],
+      y: ['t', 'u', 'h', 'j'],
+      u: ['y', 'i', 'j', 'k'],
+      i: ['u', 'o', 'k', 'l'],
+      o: ['i', 'p', 'l'],
+      p: ['o', 'l'],
+      a: ['q', 's', 'z'],
+      s: ['a', 'w', 'd', 'z', 'x'],
+      d: ['s', 'e', 'f', 'x', 'c'],
+      f: ['d', 'r', 'g', 'c', 'v'],
+      g: ['f', 't', 'h', 'v', 'b'],
+      h: ['g', 'y', 'j', 'b', 'n'],
+      j: ['h', 'u', 'k', 'n', 'm'],
+      k: ['j', 'i', 'l', 'm'],
+      l: ['k', 'o', 'p'],
+      z: ['a', 's', 'x'],
+      x: ['z', 's', 'd', 'c'],
+      c: ['x', 'd', 'f', 'v'],
+      v: ['c', 'f', 'g', 'b'],
+      b: ['v', 'g', 'h', 'n'],
+      n: ['b', 'h', 'j', 'm'],
+      m: ['n', 'j', 'k'],
+    };
+
+    const lowerChar = char.toLowerCase();
+    const nearbyKeys = keyboardMap[lowerChar];
+
+    if (!nearbyKeys || nearbyKeys.length === 0) {
+      // Fallback to random letter
+      return String.fromCharCode(97 + Math.floor(Math.random() * 26));
+    }
+
+    const randomNearby = nearbyKeys[Math.floor(Math.random() * nearbyKeys.length)];
+
+    // Preserve case
+    return char === char.toUpperCase() ? randomNearby.toUpperCase() : randomNearby;
+  }
+
+  /**
+   * Randomly move mouse slightly during typing (simulating hand movement)
+   */
+  async randomMouseWiggle() {
+    try {
+      const currentPos = await this.currentPage.evaluate(() => ({
+        x: window.innerWidth / 2,
+        y: window.innerHeight / 2,
+      }));
+
+      // Small random movement (5-30 pixels)
+      const deltaX = (Math.random() - 0.5) * 60;
+      const deltaY = (Math.random() - 0.5) * 60;
+
+      await this.currentPage.mouse.move(currentPos.x + deltaX, currentPos.y + deltaY, { steps: 3 });
+    } catch (error) {
+      // Ignore mouse movement errors
+    }
+  }
+
+  /**
    * Move mouse to element with human-like curve movement
    */
   async moveMouseToElement(element) {
@@ -171,34 +293,105 @@ class PlaywrightService {
   }
 
   /**
-   * Type text in a human-like manner with random delays
+   * Type text in a human-like manner with advanced realistic patterns
+   * Features:
+   * - Burst typing (fast bursts followed by pauses)
+   * - Character-type-aware delays (punctuation slower than letters)
+   * - Realistic typos based on keyboard proximity
+   * - Random mouse movements during typing
+   * - Gaussian distribution for delays (more natural)
+   * - Reading pauses (simulating re-reading what was typed)
    */
   async typeHumanLike(element, text) {
-    for (let i = 0; i < text.length; i++) {
-      // Random typing speed between 50-150ms per character
-      const charDelay = Math.floor(Math.random() * 100) + 50;
+    let i = 0;
+    let previousChar = '';
 
-      // Occasionally add longer pauses (simulating thinking)
-      const shouldPause = Math.random() < 0.1; // 10% chance
-      if (shouldPause && i > 0) {
-        await this.currentPage.waitForTimeout(Math.random() * 300 + 200);
+    while (i < text.length) {
+      // === BURST TYPING PATTERN ===
+      // Humans type in bursts of 3-7 characters, then pause to think
+      const burstLength = Math.floor(this.gaussianRandom(5, 2)); // Average 5 chars per burst
+      const burstEnd = Math.min(i + burstLength, text.length);
+
+      // Type burst of characters
+      for (let j = i; j < burstEnd; j++) {
+        const char = text[j];
+
+        // === REALISTIC TYPO SIMULATION (CHECK FIRST) ===
+        // Higher typo chance at:
+        // - End of bursts (typing fast)
+        // - After spaces (starting new word)
+        // - Only for letters (we don't typo punctuation as much)
+        const isEndOfBurst = j === burstEnd - 1;
+        const afterSpace = previousChar === ' ';
+        const isLetter = /[a-zA-Z]/.test(char);
+
+        let typoChance = 0.08; // Base 8% chance (increased from 3% for more realistic typos)
+        if (isEndOfBurst) typoChance += 0.04; // Higher at end of bursts
+        if (afterSpace) typoChance += 0.03; // Higher after spaces
+
+        const shouldTypo = Math.random() < typoChance && isLetter && j < text.length - 1;
+
+        if (shouldTypo) {
+          // Get nearby key for realistic typo
+          const wrongChar = this.getNearbyKey(char);
+          console.log(`💡 Typo simulation: typing "${wrongChar}" instead of "${char}"`);
+
+          // Type wrong character FIRST
+          await element.pressSequentially(wrongChar, { delay: this.gaussianRandom(80, 20) });
+
+          // Pause when noticing typo (human reaction time)
+          await this.currentPage.waitForTimeout(this.gaussianRandom(300, 100));
+
+          // Delete wrong character
+          await element.press('Backspace');
+          await this.currentPage.waitForTimeout(this.gaussianRandom(150, 50));
+
+          // Now type the CORRECT character (slower, more careful)
+          await element.pressSequentially(char, { delay: this.gaussianRandom(150, 40) });
+          console.log(`✅ Typo corrected: "${char}"`);
+        } else {
+          // No typo - type character normally
+          const charDelay = this.getCharacterTypingDelay(char, previousChar);
+          await element.pressSequentially(char, { delay: charDelay });
+        }
+
+        previousChar = char;
+
+        // === RANDOM MOUSE WIGGLE ===
+        // 5% chance to move mouse slightly during typing (natural hand movement)
+        if (Math.random() < 0.05) {
+          await this.randomMouseWiggle();
+        }
       }
 
-      // Type single character
-      await element.pressSequentially(text[i], { delay: charDelay });
+      i = burstEnd;
 
-      // Occasionally simulate typo and correction (5% chance)
-      const shouldTypo = Math.random() < 0.05 && i < text.length - 1;
-      if (shouldTypo) {
-        // Random wrong character
-        const wrongChar = String.fromCharCode(97 + Math.floor(Math.random() * 26));
-        await element.pressSequentially(wrongChar, { delay: 80 });
-        await this.currentPage.waitForTimeout(100 + Math.random() * 200);
-        // Delete wrong character
-        await element.press('Backspace');
-        await this.currentPage.waitForTimeout(50 + Math.random() * 100);
+      // === THINKING PAUSE BETWEEN BURSTS ===
+      if (i < text.length) {
+        // Longer pause at sentence boundaries
+        const justTypedPunctuation = /[.!?]/.test(previousChar);
+        const pauseDuration = justTypedPunctuation
+          ? this.gaussianRandom(800, 200) // Longer pause after sentences
+          : this.gaussianRandom(400, 150); // Regular thinking pause
+
+        await this.currentPage.waitForTimeout(pauseDuration);
+
+        // === READING PAUSE ===
+        // 15% chance to pause and "re-read" what was typed
+        // More likely after punctuation
+        const readingPauseChance = justTypedPunctuation ? 0.25 : 0.15;
+        if (Math.random() < readingPauseChance) {
+          // Simulate reading by pausing longer
+          await this.currentPage.waitForTimeout(this.gaussianRandom(1000, 300));
+
+          // Small mouse movement (looking at text)
+          await this.randomMouseWiggle();
+        }
       }
     }
+
+    // Final pause after finishing typing (reviewing before submit)
+    await this.currentPage.waitForTimeout(this.gaussianRandom(800, 250));
   }
 
   /**
