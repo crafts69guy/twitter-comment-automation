@@ -804,8 +804,22 @@ class PlaywrightService {
 
         console.log(`Navigated to: ${link.url}`);
 
+        // Check stop flag after navigation
+        if (this.shouldStop) {
+          console.log('Batch processing stopped by user after navigation');
+          this.isProcessing = false;
+          return { stopped: true, results, processedCount: i };
+        }
+
         // Wait for page to settle and load dynamic content
         await page.waitForTimeout(5000);
+
+        // Check stop flag after page load wait
+        if (this.shouldStop) {
+          console.log('Batch processing stopped by user after page load');
+          this.isProcessing = false;
+          return { stopped: true, results, processedCount: i };
+        }
 
         // Auto-reply workflow: Like + Comment
         await this.autoReplyOnPage(page, link.comment);
@@ -824,6 +838,13 @@ class PlaywrightService {
           onLinkComplete(result);
         }
 
+        // Check stop flag immediately after completing link (before delays)
+        if (this.shouldStop) {
+          console.log('Batch processing stopped by user after completing link');
+          this.isProcessing = false;
+          return { stopped: true, results, processedCount: i + 1 };
+        }
+
         // Human behavior: After posting a reply, users typically:
         // 1. Check if the reply posted correctly
         // 2. See if anyone liked/replied immediately
@@ -834,8 +855,22 @@ class PlaywrightService {
           console.log('Post-reply activity (checking reply, reading comments)...');
           await this.randomDelay(5000, 10000); // 5-10s post-reply activity
 
+          // Check stop flag after first delay
+          if (this.shouldStop) {
+            console.log('Batch processing stopped by user during post-reply activity');
+            this.isProcessing = false;
+            return { stopped: true, results, processedCount: i + 1 };
+          }
+
           console.log('Waiting before navigating to next tweet...');
           await this.randomDelay(3000, 6000); // 3-6s transition delay
+
+          // Check stop flag after second delay
+          if (this.shouldStop) {
+            console.log('Batch processing stopped by user during transition delay');
+            this.isProcessing = false;
+            return { stopped: true, results, processedCount: i + 1 };
+          }
 
           // Total delay between tweets: 8-16 seconds (much more realistic)
         }
@@ -856,10 +891,24 @@ class PlaywrightService {
           onLinkComplete(result);
         }
 
+        // Check stop flag after failed link
+        if (this.shouldStop) {
+          console.log('Batch processing stopped by user after link failure');
+          this.isProcessing = false;
+          return { stopped: true, results, processedCount: i + 1 };
+        }
+
         // Even on error, add a delay before next tweet
         if (i < links.length - 1) {
           console.log('Error occurred, waiting before next tweet...');
           await this.randomDelay(3000, 6000);
+
+          // Check stop flag after error delay
+          if (this.shouldStop) {
+            console.log('Batch processing stopped by user during error delay');
+            this.isProcessing = false;
+            return { stopped: true, results, processedCount: i + 1 };
+          }
         }
       }
     }
@@ -883,8 +932,18 @@ class PlaywrightService {
   async autoReplyOnPage(page, comment) {
     console.log('Starting auto-reply workflow...');
 
+    // Check stop flag before starting
+    if (this.shouldStop) {
+      throw new Error('Auto-reply stopped by user before starting');
+    }
+
     // Step 1: Like the post
     await this.likePost(page);
+
+    // Check stop flag after liking
+    if (this.shouldStop) {
+      throw new Error('Auto-reply stopped by user after liking');
+    }
 
     // Human behavior: After liking, users typically:
     // 1. Watch the like animation (already handled in likePost)
@@ -893,6 +952,11 @@ class PlaywrightService {
     // This delay simulates "thinking time" between like and reply
     console.log('Thinking about reply...');
     await this.randomDelay(2000, 4500);
+
+    // Check stop flag after thinking delay
+    if (this.shouldStop) {
+      throw new Error('Auto-reply stopped by user during thinking time');
+    }
 
     // Step 2: Reply to the post
     await this.replyToPost(page, comment);
@@ -907,8 +971,18 @@ class PlaywrightService {
     try {
       console.log('Attempting to like post...');
 
+      // Check stop flag before starting
+      if (this.shouldStop) {
+        throw new Error('Like stopped by user');
+      }
+
       // Pre-delay before liking
       await page.waitForTimeout(2500);
+
+      // Check stop flag after pre-delay
+      if (this.shouldStop) {
+        throw new Error('Like stopped by user after pre-delay');
+      }
 
       // Wait for first cell container
       await page.waitForSelector('[data-testid="cellInnerDiv"]', {
@@ -929,17 +1003,32 @@ class PlaywrightService {
       if ((await likeButton.count()) > 0) {
         await this.moveMouseToElement(likeButton);
         await this.randomDelay(300, 800);
+
+        // Check stop flag before clicking
+        if (this.shouldStop) {
+          throw new Error('Like stopped by user before clicking');
+        }
+
         await likeButton.click();
         console.log('✅ Post liked');
 
         // Post-like delay
         await this.randomDelay(3000, 6000);
+
+        // Check stop flag after post-like delay
+        if (this.shouldStop) {
+          throw new Error('Like stopped by user after post-like delay');
+        }
       } else {
         console.log('Like button not found');
       }
     } catch (error) {
       console.error('Error liking post:', error.message);
-      // Continue even if like fails
+      // Re-throw if it's a stop error
+      if (error.message.includes('stopped by user')) {
+        throw error;
+      }
+      // Continue even if like fails for other reasons
     }
   }
 
@@ -950,13 +1039,29 @@ class PlaywrightService {
     try {
       console.log('Attempting to reply to post (inline mode)...');
 
+      // Check stop flag before starting
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user before starting');
+      }
+
       // Human behavior: Scroll with smooth, variable amount (not fixed 100px)
       await this.randomDelay(500, 1000);
+
+      // Check stop flag after first delay
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user before scrolling');
+      }
+
       const scrollAmount = Math.floor(this.gaussianRandom(120, 40)); // Average 120px, varies
       await page.evaluate(amount => {
         window.scrollBy({ top: amount, behavior: 'smooth' });
       }, scrollAmount);
       await this.randomDelay(800, 1500); // Wait for smooth scroll to complete
+
+      // Check stop flag after scrolling
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user after scrolling');
+      }
 
       // Look for inline reply textarea directly (without clicking reply button)
       // Based on Twitter's DOM structure, the textarea is already rendered inline
@@ -1022,6 +1127,11 @@ class PlaywrightService {
       console.log('Preparing to type reply...');
       await this.randomDelay(1000, 2500);
 
+      // Check stop flag before clicking textarea
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user before clicking textarea');
+      }
+
       // Click directly on the textarea to focus it
       await this.moveMouseToElement(textarea);
       await this.randomDelay(300, 700);
@@ -1029,14 +1139,29 @@ class PlaywrightService {
       await this.randomDelay(800, 1500);
       console.log('Focused on inline reply textarea');
 
+      // Check stop flag before typing
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user before typing');
+      }
+
       // Type comment with human-like behavior
       console.log(`Typing comment: "${comment}"`);
       await this.typeHumanLike(textarea, comment);
 
       console.log('Comment typed successfully');
 
+      // Check stop flag after typing
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user after typing');
+      }
+
       // Wait before submitting (human-like pause to review)
       await this.randomDelay(2000, 4000);
+
+      // Check stop flag before submitting
+      if (this.shouldStop) {
+        throw new Error('Reply stopped by user before submitting');
+      }
 
       // Find and click submit button
       const submitButton = await this.waitForEnabledSubmitButton(page);
@@ -1044,11 +1169,22 @@ class PlaywrightService {
       if (submitButton) {
         await this.moveMouseToElement(submitButton);
         await this.randomDelay(400, 900);
+
+        // Check stop flag before clicking submit
+        if (this.shouldStop) {
+          throw new Error('Reply stopped by user before clicking submit');
+        }
+
         await submitButton.click();
         console.log('✅ Reply submitted');
 
         // Final delay to ensure reply is posted
         await this.randomDelay(2500, 4000);
+
+        // Check stop flag after submission
+        if (this.shouldStop) {
+          throw new Error('Reply stopped by user after submission');
+        }
 
         // Human behavior: After submitting, users typically check their reply
         // Scroll down a bit to see the posted reply
@@ -1060,6 +1196,11 @@ class PlaywrightService {
 
         // Wait and "read" the posted reply
         await this.randomDelay(1500, 3000);
+
+        // Check stop flag after checking reply
+        if (this.shouldStop) {
+          throw new Error('Reply stopped by user after checking reply');
+        }
       } else {
         throw new Error('Submit button not found or not enabled');
       }
