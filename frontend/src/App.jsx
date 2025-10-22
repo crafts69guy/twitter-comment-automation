@@ -58,13 +58,15 @@ function App() {
       batchSize: 15,
       batchIntervalMinutes: 20,
       additionalPrompt: '',
+      twitterUsername: '',
+      twitterPassword: '',
       twitterCookies: '',
       twitterBearerToken: '',
     };
   };
 
   // Save settings to localStorage
-  const saveSettingsToStorage = (newSettings) => {
+  const saveSettingsToStorage = newSettings => {
     try {
       localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
       console.log('Saved settings to localStorage:', newSettings);
@@ -316,7 +318,7 @@ function App() {
     },
 
     'credentials:extracted': data => {
-      console.log('Credentials extracted:', data);
+      console.log('Credentials extracted from browser:', data);
       addLog(
         'success',
         'Credentials Extracted',
@@ -324,18 +326,23 @@ function App() {
         data,
       );
 
-      // Update local settings with extracted credentials
+      // Update local settings with extracted credentials (actual tokens, not display text)
       if (data.bearerToken || data.cookies) {
         setSettings(prev => {
           const updated = { ...prev };
-          if (data.bearerToken && data.bearerToken !== prev.twitterBearerToken) {
+
+          // Only update if we have actual credential values (not empty strings)
+          if (data.bearerToken && data.bearerToken.trim() !== '') {
             updated.twitterBearerToken = data.bearerToken;
-          }
-          if (data.cookies && data.cookies !== prev.twitterCookies) {
-            updated.twitterCookies = data.cookies;
+            console.log('✅ Updated twitterBearerToken in localStorage');
           }
 
-          // Save to localStorage
+          if (data.cookies && data.cookies.trim() !== '') {
+            updated.twitterCookies = data.cookies;
+            console.log('✅ Updated twitterCookies in localStorage');
+          }
+
+          // Save to localStorage immediately
           saveSettingsToStorage(updated);
 
           return updated;
@@ -344,7 +351,8 @@ function App() {
 
       toast({
         title: '✅ Credentials Extracted!',
-        description: 'Bearer Token and Cookies have been automatically extracted from browser',
+        description:
+          'Bearer Token and Cookies have been automatically extracted and saved to localStorage',
         status: 'success',
         duration: 5000,
         isClosable: true,

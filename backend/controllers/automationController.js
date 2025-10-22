@@ -489,10 +489,10 @@ class AutomationController {
             console.log('✅ Updated Cookies in session');
           }
 
-          // Emit event to frontend to update UI
+          // Emit event to frontend to update UI and localStorage
           this.emitSSE(this.userId, 'credentials:extracted', {
-            bearerToken: extractedCredentials.bearerToken ? '✅ Extracted' : '',
-            cookies: extractedCredentials.cookies ? '✅ Extracted' : '',
+            bearerToken: extractedCredentials.bearerToken || '',
+            cookies: extractedCredentials.cookies || '',
             message: 'Bearer Token and Cookies extracted from browser successfully!',
           });
         }
