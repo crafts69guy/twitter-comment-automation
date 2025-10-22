@@ -823,6 +823,22 @@ class PlaywrightService {
         if (onLinkComplete) {
           onLinkComplete(result);
         }
+
+        // Human behavior: After posting a reply, users typically:
+        // 1. Check if the reply posted correctly
+        // 2. See if anyone liked/replied immediately
+        // 3. Maybe scroll to read other comments
+        // 4. Wait before moving to next tweet
+        // This makes the behavior more natural and avoids rate limiting
+        if (i < links.length - 1) {
+          console.log('Post-reply activity (checking reply, reading comments)...');
+          await this.randomDelay(5000, 10000); // 5-10s post-reply activity
+
+          console.log('Waiting before navigating to next tweet...');
+          await this.randomDelay(3000, 6000); // 3-6s transition delay
+
+          // Total delay between tweets: 8-16 seconds (much more realistic)
+        }
       } catch (error) {
         console.error(`❌ Error processing link ${i + 1}:`, error.message);
 
@@ -839,12 +855,12 @@ class PlaywrightService {
         if (onLinkComplete) {
           onLinkComplete(result);
         }
-      }
 
-      // Delay between links to avoid rate limiting
-      if (i < links.length - 1) {
-        console.log('Waiting 2 seconds before next link...');
-        await page.waitForTimeout(2000);
+        // Even on error, add a delay before next tweet
+        if (i < links.length - 1) {
+          console.log('Error occurred, waiting before next tweet...');
+          await this.randomDelay(3000, 6000);
+        }
       }
     }
 
@@ -869,6 +885,14 @@ class PlaywrightService {
 
     // Step 1: Like the post
     await this.likePost(page);
+
+    // Human behavior: After liking, users typically:
+    // 1. Watch the like animation (already handled in likePost)
+    // 2. Re-read the tweet to think about the reply
+    // 3. Decide what to comment
+    // This delay simulates "thinking time" between like and reply
+    console.log('Thinking about reply...');
+    await this.randomDelay(2000, 4500);
 
     // Step 2: Reply to the post
     await this.replyToPost(page, comment);
@@ -924,25 +948,86 @@ class PlaywrightService {
    */
   async replyToPost(page, comment) {
     try {
-      console.log('Attempting to reply to post...');
+      console.log('Attempting to reply to post (inline mode)...');
 
-      // Click reply button to open reply textarea
-      const replyButton = page.locator('[data-testid="reply"]').first();
-      await this.moveMouseToElement(replyButton);
-      await this.randomDelay(400, 900);
-      await replyButton.click();
-      console.log('Clicked reply button');
+      // Human behavior: Scroll with smooth, variable amount (not fixed 100px)
+      await this.randomDelay(500, 1000);
+      const scrollAmount = Math.floor(this.gaussianRandom(120, 40)); // Average 120px, varies
+      await page.evaluate(amount => {
+        window.scrollBy({ top: amount, behavior: 'smooth' });
+      }, scrollAmount);
+      await this.randomDelay(800, 1500); // Wait for smooth scroll to complete
 
-      // Wait for reply textarea to appear
-      const textarea = page.locator('[data-testid="tweetTextarea_0"][role="textbox"]');
-      await textarea.waitFor({ timeout: 10000 });
-      console.log('Reply textarea found');
+      // Look for inline reply textarea directly (without clicking reply button)
+      // Based on Twitter's DOM structure, the textarea is already rendered inline
+      let textarea = null;
 
-      // Move mouse and click textarea to focus
+      // Multiple selector strategies (LANGUAGE-INDEPENDENT)
+      // These selectors work regardless of browser language (EN, VI, JP, etc.)
+      // IMPORTANT: Avoid aria-label and other text-based attributes that can be translated
+      const textareaSelectors = [
+        // Strategy 1: Most reliable - data-testid + contenteditable + role
+        // Does NOT use aria-label (which gets translated to "Đăng văn bản" in Vietnamese)
+        '[data-testid="tweetTextarea_0"][contenteditable="true"][role="textbox"]',
+
+        // Strategy 2: DraftEditor class + data-testid (very specific)
+        '.public-DraftEditor-content[contenteditable="true"][data-testid="tweetTextarea_0"]',
+
+        // Strategy 3: notranslate class + data-testid (Twitter marks this as non-translatable)
+        '.notranslate.public-DraftEditor-content[contenteditable="true"][data-testid="tweetTextarea_0"]',
+
+        // Strategy 4: Generic DraftEditor with role (no data-testid needed)
+        '.public-DraftEditor-content[contenteditable="true"][role="textbox"]',
+
+        // Strategy 5: notranslate + contenteditable + role
+        '.notranslate[contenteditable="true"][role="textbox"]',
+
+        // Strategy 6: Most generic - any contenteditable textbox with multiline (last resort)
+        'div[contenteditable="true"][role="textbox"][aria-multiline="true"]',
+      ];
+
+      console.log('Looking for inline reply textarea...');
+
+      for (const selector of textareaSelectors) {
+        try {
+          const element = page.locator(selector).first();
+          await element.waitFor({ timeout: 3000, state: 'visible' });
+
+          // Double check element is actually visible and interactable
+          const isVisible = await element.isVisible();
+          const isEnabled = await element.isEnabled();
+
+          if (isVisible && isEnabled) {
+            textarea = element;
+            console.log(`✓ Found inline reply textarea with selector: ${selector}`);
+            break;
+          }
+        } catch (e) {
+          // Try next selector
+          console.log(`  ✗ Selector failed: ${selector}`);
+          continue;
+        }
+      }
+
+      // If no textarea found, throw error with helpful message
+      if (!textarea) {
+        console.log('❌ No inline textarea found after trying all selectors.');
+        throw new Error(
+          'Could not find inline reply textarea. Make sure you are on the tweet detail page.',
+        );
+      }
+
+      // Human behavior: Pause before clicking textarea (reading/preparing to type)
+      // Users don't immediately click the reply box - they think about what to say
+      console.log('Preparing to type reply...');
+      await this.randomDelay(1000, 2500);
+
+      // Click directly on the textarea to focus it
       await this.moveMouseToElement(textarea);
       await this.randomDelay(300, 700);
       await textarea.click();
-      await this.randomDelay(500, 1000);
+      await this.randomDelay(800, 1500);
+      console.log('Focused on inline reply textarea');
 
       // Type comment with human-like behavior
       console.log(`Typing comment: "${comment}"`);
@@ -964,6 +1049,17 @@ class PlaywrightService {
 
         // Final delay to ensure reply is posted
         await this.randomDelay(2500, 4000);
+
+        // Human behavior: After submitting, users typically check their reply
+        // Scroll down a bit to see the posted reply
+        console.log('Checking posted reply...');
+        const checkScrollAmount = Math.floor(this.gaussianRandom(80, 30));
+        await page.evaluate(amount => {
+          window.scrollBy({ top: amount, behavior: 'smooth' });
+        }, checkScrollAmount);
+
+        // Wait and "read" the posted reply
+        await this.randomDelay(1500, 3000);
       } else {
         throw new Error('Submit button not found or not enabled');
       }
