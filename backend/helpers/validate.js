@@ -1,3 +1,52 @@
+// Simple and effective comment truncation that keeps as many complete sentences as possible
+function smartTruncateComment(comment, charLimit) {
+  if (comment.length <= charLimit) {
+    return comment;
+  }
+
+  // Clean up the comment
+  comment = comment.trim();
+
+  // Strategy 1: Try to keep complete sentences
+  const sentences = comment.split(/(?<=[.!?])\s+/);
+  let result = '';
+
+  for (const sentence of sentences) {
+    const testLength = result.length + sentence.length + (result ? ' ' : '');
+    if (testLength <= charLimit) {
+      result += (result ? ' ' : '') + sentence;
+    } else {
+      break;
+    }
+  }
+
+  // If we have a good result (at least 50% of original), return it
+  if (result.length > 0 && result.length >= comment.length * 0.5) {
+    return result;
+  }
+
+  // Strategy 2: Try to keep complete words
+  const words = comment.split(/\s+/);
+  result = '';
+
+  for (const word of words) {
+    const testLength = result.length + word.length + (result ? ' ' : '');
+    if (testLength <= charLimit) {
+      result += (result ? ' ' : '') + word;
+    } else {
+      break;
+    }
+  }
+
+  // If we have a reasonable result, return it
+  if (result.length > 0) {
+    return result;
+  }
+
+  // Strategy 3: Last resort - truncate at character boundary
+  return comment.substring(0, charLimit - 3).trim() + '...';
+}
+
 // Helper function to validate and retry comment
 export async function validateComment(comment, charLimit, retryCount, retryFn) {
   if (comment.length > charLimit && retryCount < 2) {
@@ -7,22 +56,22 @@ export async function validateComment(comment, charLimit, retryCount, retryFn) {
     return await retryFn(retryCount + 1);
   }
 
+  // If comment is still too long after retries, smart truncate it
   if (comment.length > charLimit) {
-    console.error(
-      `❌ Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts.`,
+    const originalLength = comment.length;
+    comment = smartTruncateComment(comment, charLimit);
+    console.log(
+      `✂️ Comment truncated from ${originalLength} to ${comment.length} chars (${charLimit} limit)`,
     );
-    // throw new Error(
-    //   `Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters after ${retryCount + 1} attempts.`,
-    // );
   }
 
+  // Ensure it doesn't exceed Twitter's hard limit
   if (comment.length > 280) {
-    console.error(
-      `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
+    const originalLength = comment.length;
+    comment = smartTruncateComment(comment, 280);
+    console.log(
+      `✂️ Comment truncated from ${originalLength} to ${comment.length} chars (Twitter 280 limit)`,
     );
-    // throw new Error(
-    //   `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit.`,
-    // );
   }
 
   console.log(
@@ -44,7 +93,9 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
 
     // Fallback: Try to match by index (if AI returned comments in same order)
     if (!generated && index < parsedComments.length) {
-      console.warn(`⚠️ Could not find exact postId match for ${post.id}, using index-based fallback`);
+      console.warn(
+        `⚠️ Could not find exact postId match for ${post.id}, using index-based fallback`,
+      );
       generated = parsedComments[index];
       // Override the postId with the correct one
       generated.postId = post.id;
@@ -52,14 +103,15 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
 
     // Fallback 2: Try to match by partial ID (in case AI truncated the UUID)
     if (!generated) {
-      const partialMatch = parsedComments.find(c =>
-        c.postId && (
-          post.id.startsWith(c.postId) ||
-          c.postId.startsWith(post.id.substring(0, 15))
-        )
+      const partialMatch = parsedComments.find(
+        c =>
+          c.postId &&
+          (post.id.startsWith(c.postId) || c.postId.startsWith(post.id.substring(0, 15))),
       );
       if (partialMatch) {
-        console.warn(`⚠️ Found partial match for ${post.id}, AI returned truncated ID: ${partialMatch.postId}`);
+        console.warn(
+          `⚠️ Found partial match for ${post.id}, AI returned truncated ID: ${partialMatch.postId}`,
+        );
         generated = partialMatch;
         // Override the postId with the correct one
         generated.postId = post.id;
@@ -74,25 +126,24 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
       };
     }
 
-    const comment = generated.comment.trim();
+    let comment = generated.comment.trim();
 
-    // Validate character limit
+    // Smart truncate if comment exceeds limits
     if (comment.length > charLimit) {
-      return {
-        postId: post.id,
-        error: `Generated comment (${comment.length} chars) exceeds limit of ${charLimit} characters`,
-        comment,
-        success: true,
-      };
+      const originalLength = comment.length;
+      comment = smartTruncateComment(comment, charLimit);
+      console.log(
+        `✂️ Comment for post ${post.id} truncated from ${originalLength} to ${comment.length} chars (${charLimit} limit)`,
+      );
     }
 
+    // Ensure it doesn't exceed Twitter's hard limit
     if (comment.length > 280) {
-      return {
-        postId: post.id,
-        error: `Generated comment (${comment.length} chars) exceeds Twitter's 280 character limit`,
-        comment,
-        success: true,
-      };
+      const originalLength = comment.length;
+      comment = smartTruncateComment(comment, 280);
+      console.log(
+        `✂️ Comment for post ${post.id} truncated from ${originalLength} to ${comment.length} chars (Twitter 280 limit)`,
+      );
     }
 
     console.log(`✅ Comment generated for post ${post.id} (${comment.length}/${charLimit} chars)`);
