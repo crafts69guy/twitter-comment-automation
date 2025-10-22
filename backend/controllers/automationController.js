@@ -211,7 +211,7 @@ class AutomationController {
 
       try {
         // Try to extract fresh credentials from browser
-        const freshCredentials = await this.playwrightService.extractCredentialsFromBrowser();
+        const freshCredentials = await this.playwright.extractCredentialsFromBrowser();
 
         if (freshCredentials.bearerToken && freshCredentials.cookies) {
           console.log('✅ Successfully refreshed credentials from browser');

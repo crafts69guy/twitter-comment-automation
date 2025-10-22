@@ -342,13 +342,7 @@ function App() {
     },
 
     'credentials:extracted': data => {
-      console.log('Credentials extracted from browser:', data);
-      addLog(
-        'success',
-        'Credentials Extracted',
-        data.message || 'Bearer Token and Cookies extracted from browser',
-        data,
-      );
+      console.log('Credentials extracted from browser (via SSE):', data);
 
       // Update local settings with extracted credentials (actual tokens, not display text)
       if (data.bearerToken || data.cookies) {
@@ -358,12 +352,12 @@ function App() {
           // Only update if we have actual credential values (not empty strings)
           if (data.bearerToken && data.bearerToken.trim() !== '') {
             updated.twitterBearerToken = data.bearerToken;
-            console.log('✅ Updated twitterBearerToken in localStorage');
+            console.log('✅ Updated twitterBearerToken in localStorage (SSE)');
           }
 
           if (data.cookies && data.cookies.trim() !== '') {
             updated.twitterCookies = data.cookies;
-            console.log('✅ Updated twitterCookies in localStorage');
+            console.log('✅ Updated twitterCookies in localStorage (SSE)');
           }
 
           // Save to localStorage immediately
@@ -371,6 +365,19 @@ function App() {
 
           return updated;
         });
+
+        // Log to Activity Log
+        addLog(
+          'success',
+          '🔑 Twitter Credentials Extracted (Re-login)',
+          data.message || 'Bearer Token and Cookies extracted after re-authentication',
+          {
+            bearerTokenLength: data.bearerToken?.length || 0,
+            cookiesCount: data.cookies?.split(';').length || 0,
+            extractedAt: new Date().toISOString(),
+            source: 'SSE Event',
+          },
+        );
       }
 
       toast({
@@ -497,6 +504,19 @@ function App() {
 
   const startAutomation = async () => {
     try {
+      // Sync settings to backend before starting (to ensure latest credentials are sent)
+      console.log('🔄 Syncing settings before starting automation...');
+      console.log('📊 Current credentials in localStorage:', {
+        hasBearerToken: !!settings.twitterBearerToken,
+        bearerTokenLength: settings.twitterBearerToken?.length || 0,
+        hasCookies: !!settings.twitterCookies,
+        cookiesLength: settings.twitterCookies?.length || 0,
+      });
+
+      await axios.post(`${API_BASE}/automation/update-settings`, settings, {
+        withCredentials: true,
+      });
+
       const response = await axios.post(
         `${API_BASE}/automation/start`,
         {},
@@ -704,11 +724,57 @@ function App() {
           isLoggedIn: response.data.isLoggedIn || false,
           currentUrl: null,
         });
-        toast({
-          title: 'Browser Opened',
-          status: 'success',
-          duration: 2000,
-        });
+
+        // Check if credentials were extracted during login
+        if (response.data.extractedCredentials) {
+          const { bearerToken, cookies } = response.data.extractedCredentials;
+          console.log('📥 Received extracted credentials from browser open response');
+
+          // Update settings in state and localStorage
+          setSettings(prev => {
+            const updated = { ...prev };
+
+            if (bearerToken && bearerToken.trim() !== '') {
+              updated.twitterBearerToken = bearerToken;
+              console.log('✅ Updated twitterBearerToken in localStorage');
+            }
+
+            if (cookies && cookies.trim() !== '') {
+              updated.twitterCookies = cookies;
+              console.log('✅ Updated twitterCookies in localStorage');
+            }
+
+            // Save to localStorage immediately
+            saveSettingsToStorage(updated);
+
+            return updated;
+          });
+
+          // Log to Activity Log
+          addLog(
+            'success',
+            '🔑 Twitter Credentials Extracted',
+            'Bearer Token and Cookies extracted from browser and saved to localStorage',
+            {
+              bearerTokenLength: bearerToken?.length || 0,
+              cookiesCount: cookies?.split(';').length || 0,
+              extractedAt: new Date().toISOString(),
+            },
+          );
+
+          toast({
+            title: '✅ Credentials Extracted!',
+            description: 'Bearer Token and Cookies saved to localStorage',
+            status: 'success',
+            duration: 3000,
+          });
+        } else {
+          toast({
+            title: 'Browser Opened',
+            status: 'success',
+            duration: 2000,
+          });
+        }
       }
     } catch (error) {
       console.error('Error opening browser:', error);

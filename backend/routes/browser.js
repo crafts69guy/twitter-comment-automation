@@ -1,5 +1,6 @@
 import express from 'express';
 import playwrightService from '../services/playwrightService.js';
+import { emitSSE } from '../server.js';
 
 const router = express.Router();
 
@@ -62,6 +63,7 @@ router.post('/open', async (req, res) => {
     req.userSession.browser.lastActivityAt = new Date();
 
     // Check if credentials were extracted after login
+    let extractedCredentials = null;
     if (playwrightService.extractedCredentials) {
       const extracted = playwrightService.extractedCredentials;
 
@@ -71,6 +73,19 @@ router.post('/open', async (req, res) => {
 
       console.log('✅ Extracted credentials saved to session');
 
+      // Store for response
+      extractedCredentials = {
+        bearerToken: extracted.bearerToken || '',
+        cookies: extracted.cookies || '',
+      };
+
+      // Emit SSE event to frontend to update localStorage
+      emitSSE(req.userId, 'credentials:extracted', {
+        bearerToken: extracted.bearerToken || '',
+        cookies: extracted.cookies || '',
+        message: 'Bearer Token and Cookies extracted from browser successfully!',
+      });
+
       // Clear from service
       playwrightService.extractedCredentials = null;
     }
@@ -79,6 +94,7 @@ router.post('/open', async (req, res) => {
       success: true,
       message: 'Browser opened successfully',
       autoLoginAttempted: !!(credentials.username && credentials.password),
+      extractedCredentials: extractedCredentials,
       ...status,
     });
   } catch (error) {

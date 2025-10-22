@@ -16,14 +16,26 @@ export function parseCookies(cookiesInput) {
 
   let cookieArray = [];
 
-  // Check if it's JSON format (from browser extension)
+  // Check if it's JSON format
   try {
     const parsed = JSON.parse(cookiesInput);
+
+    // Format 1: {"cookies": [{name: "x", value: "y"}]}
     if (parsed.cookies && Array.isArray(parsed.cookies)) {
       cookieArray = parsed.cookies;
     }
+    // Format 2: {"auth_token": "xxx", "ct0": "yyy"} (from playwrightService)
+    else if (typeof parsed === 'object') {
+      // Convert object to cookie string
+      const cookieString = Object.entries(parsed)
+        .map(([key, value]) => `${key}=${value}`)
+        .join('; ');
+      const ct0 = parsed.ct0 || '';
+      console.log('📝 Parsed cookies from object format:', Object.keys(parsed));
+      return { cookieString, ct0 };
+    }
   } catch (e) {
-    // Not JSON, treat as cookie string
+    // Not JSON, treat as cookie string format: "auth_token=xxx; ct0=yyy"
     const cookieObj = {};
     cookiesInput.split(';').forEach(cookie => {
       const [key, value] = cookie.trim().split('=');
@@ -31,23 +43,32 @@ export function parseCookies(cookiesInput) {
         cookieObj[key] = value;
       }
     });
+    console.log('📝 Parsed cookies from string format:', Object.keys(cookieObj));
     return { cookieString: cookiesInput, ct0: cookieObj.ct0 || '' };
   }
 
-  // Convert JSON array to cookie string
+  // Convert JSON array to cookie string (Format 1)
   const cookieString = cookieArray.map(c => `${c.name}=${c.value}`).join('; ');
 
   // Extract ct0 for CSRF token
   const ct0Cookie = cookieArray.find(c => c.name === 'ct0');
   const ct0 = ct0Cookie ? ct0Cookie.value : '';
 
+  console.log(
+    '📝 Parsed cookies from array format:',
+    cookieArray.map(c => c.name),
+  );
   return { cookieString, ct0 };
 }
 
 /**
  * Fetch tweet data from Twitter GraphQL API
+ * @param {string} tweetId - Tweet ID to fetch
+ * @param {string} cookies - Cookies in JSON format
+ * @param {string} bearerToken - Bearer token for authentication
+ * @param {number} retries - Number of retries on failure (default: 2)
  */
-export async function fetchTweetData(tweetId, cookies, bearerToken) {
+export async function fetchTweetData(tweetId, cookies, bearerToken, retries = 2) {
   const variables = {
     tweetId: tweetId,
     includePromotedContent: true,
@@ -100,6 +121,15 @@ export async function fetchTweetData(tweetId, cookies, bearerToken) {
   // Parse cookies (handles both JSON and string formats)
   const { cookieString, ct0 } = parseCookies(cookies);
   const csrfToken = ct0;
+
+  console.log('🔐 Twitter API Request Debug:', {
+    tweetId,
+    hasBearerToken: !!bearerToken,
+    bearerTokenFormat: bearerToken?.startsWith('Bearer ') ? 'Valid' : 'Missing "Bearer " prefix',
+    bearerTokenLength: bearerToken?.length || 0,
+    hasCsrfToken: !!csrfToken,
+    cookieStringLength: cookieString?.length || 0,
+  });
 
   const url = `https://x.com/i/api/graphql/URPP6YZ5eDCjdVMSREn4gg/TweetResultByRestId?variables=${encodeURIComponent(JSON.stringify(variables))}&features=${encodeURIComponent(JSON.stringify(features))}&fieldToggles=${encodeURIComponent(JSON.stringify(fieldToggles))}`;
 
@@ -161,6 +191,14 @@ export async function fetchTweetData(tweetId, cookies, bearerToken) {
         needsReauth: true,
         originalError: error.response?.data?.errors?.[0]?.message || error.message,
       };
+    }
+
+    // Retry on rate limit (429) or server errors (500, 502, 503, 504)
+    if (retries > 0 && [429, 500, 502, 503, 504].includes(status)) {
+      const delay = status === 429 ? 5000 : 2000; // 5s for rate limit, 2s for server errors
+      console.log(`⚠️  Retrying after ${delay}ms (${retries} retries left)...`);
+      await new Promise(resolve => setTimeout(resolve, delay));
+      return fetchTweetData(tweetId, cookies, bearerToken, retries - 1);
     }
 
     return {

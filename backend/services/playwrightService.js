@@ -10,6 +10,8 @@ class PlaywrightService {
     this.shouldPause = false;
     this.shouldStop = false;
     this.extractedCredentials = null; // Store extracted credentials temporarily
+    this.cachedCredentials = null; // Cache credentials to avoid re-extraction
+    this.lastExtractionTime = null; // Track when credentials were last extracted
   }
 
   async getBrowserStatus() {
@@ -342,8 +344,22 @@ class PlaywrightService {
   /**
    * Extract Bearer Token and Cookies from browser after login
    */
-  async extractCredentialsFromBrowser() {
+  async extractCredentialsFromBrowser(forceRefresh = false) {
     try {
+      // Check cache (valid for 1 hour)
+      const cacheValidityMs = 60 * 60 * 1000; // 1 hour
+      const isCacheValid =
+        this.cachedCredentials &&
+        this.lastExtractionTime &&
+        Date.now() - this.lastExtractionTime < cacheValidityMs;
+
+      if (!forceRefresh && isCacheValid) {
+        console.log('✅ Using cached credentials (extracted less than 1 hour ago)');
+        return this.cachedCredentials;
+      }
+
+      console.log('🔄 Extracting fresh credentials from browser...');
+
       // Get cookies from browser context
       const cookies = await this.context.cookies();
 
@@ -359,47 +375,105 @@ class PlaywrightService {
 
       // Extract Bearer Token from network requests
       let bearerToken = null;
+      let requestListener = null;
 
       // Listen to network requests to capture Authorization header
       const bearerTokenPromise = new Promise(resolve => {
-        const timeout = setTimeout(() => resolve(null), 5000);
+        const timeout = setTimeout(() => {
+          if (requestListener) {
+            this.currentPage.off('request', requestListener);
+          }
+          resolve(null);
+        }, 10000); // Increase timeout to 10s
 
-        this.currentPage.on('request', request => {
+        requestListener = request => {
           const headers = request.headers();
           if (headers['authorization'] && headers['authorization'].startsWith('Bearer ')) {
             clearTimeout(timeout);
+            this.currentPage.off('request', requestListener);
+            console.log('✅ Bearer Token captured from network request');
             resolve(headers['authorization']);
           }
-        });
+        };
+
+        this.currentPage.on('request', requestListener);
       });
 
       // Navigate to trigger API calls
+      console.log('🔄 Navigating to Twitter home to capture Bearer Token...');
       await this.currentPage.goto('https://twitter.com/home', {
         waitUntil: 'domcontentloaded',
         timeout: 30000,
       });
+
+      // Wait a bit for page to load and make API calls
+      await this.currentPage.waitForTimeout(2000);
+
+      // Scroll to trigger more API calls
+      await this.currentPage.evaluate(() => {
+        window.scrollBy(0, 500);
+      });
+
+      await this.currentPage.waitForTimeout(1000);
+
       bearerToken = await bearerTokenPromise;
 
       if (!bearerToken) {
-        // Fallback: Try to get from localStorage/sessionStorage
+        console.log('⚠️  Bearer Token not found in network requests, trying fallback methods...');
+
+        // Fallback 1: Extract from page source (main.js files)
         bearerToken = await this.currentPage.evaluate(() => {
-          // Check common places where Bearer token might be stored
-          const localStorageToken = localStorage.getItem('twitter_bearer_token');
-          if (localStorageToken) return localStorageToken;
+          try {
+            // Look for Bearer token in script tags
+            const scripts = Array.from(document.querySelectorAll('script'));
+            for (const script of scripts) {
+              const content = script.textContent || '';
+              const match = content.match(/Bearer [A-Za-z0-9\-._~+/]+=*/);
+              if (match) {
+                return match[0];
+              }
+            }
 
-          // Try to find in window object
-          if (window.__INITIAL_STATE__?.token) return window.__INITIAL_STATE__.token;
+            // Check localStorage
+            const localStorageToken = localStorage.getItem('twitter_bearer_token');
+            if (localStorageToken) return localStorageToken;
 
-          return null;
+            // Check window object
+            if (window.__INITIAL_STATE__?.token) return window.__INITIAL_STATE__.token;
+
+            return null;
+          } catch (e) {
+            return null;
+          }
         });
+
+        if (bearerToken) {
+          console.log('✅ Bearer Token found via fallback method');
+        }
+      }
+
+      if (!bearerToken) {
+        console.warn(
+          '⚠️  Could not extract Bearer Token. Twitter API calls may fail. Please check browser session.',
+        );
       }
 
       console.log('🔑 Bearer Token found:', bearerToken ? 'Yes' : 'No');
+      if (bearerToken) {
+        console.log('📏 Bearer Token length:', bearerToken.length);
+      }
 
-      return {
+      const credentials = {
         bearerToken: bearerToken || '',
         cookies: JSON.stringify(cookieObj),
       };
+
+      // Cache credentials
+      this.cachedCredentials = credentials;
+      this.lastExtractionTime = Date.now();
+      console.log('💾 Credentials cached for 1 hour');
+
+      return credentials;
     } catch (error) {
       console.error('❌ Error extracting credentials:', error.message);
       return {
