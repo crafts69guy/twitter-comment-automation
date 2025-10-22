@@ -98,6 +98,7 @@ function App() {
   const [failedLinks, setFailedLinks] = useState([]);
   const [browserStatus, setBrowserStatus] = useState({
     isOpen: false,
+    isLoggedIn: false,
     currentUrl: null,
   });
 
@@ -484,6 +485,7 @@ function App() {
       if (response.data.success) {
         setBrowserStatus({
           isOpen: response.data.isOpen,
+          isLoggedIn: response.data.isLoggedIn || false,
           currentUrl: response.data.currentUrl,
         });
       }
@@ -682,7 +684,11 @@ function App() {
         },
       );
       if (response.data.success) {
-        setBrowserStatus({ isOpen: true, currentUrl: null });
+        setBrowserStatus({
+          isOpen: true,
+          isLoggedIn: response.data.isLoggedIn || false,
+          currentUrl: null,
+        });
         toast({
           title: 'Browser Opened',
           status: 'success',
@@ -711,7 +717,7 @@ function App() {
         },
       );
       if (response.data.success) {
-        setBrowserStatus({ isOpen: false, currentUrl: null });
+        setBrowserStatus({ isOpen: false, isLoggedIn: false, currentUrl: null });
         toast({
           title: 'Browser Closed',
           status: 'info',

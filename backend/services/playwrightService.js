@@ -14,6 +14,8 @@ class PlaywrightService {
 
   async getBrowserStatus() {
     let isActuallyOpen = false;
+    let isLoggedIn = false;
+
     if (this.browser) {
       try {
         const isConnected = this.browser.isConnected();
@@ -23,6 +25,15 @@ class PlaywrightService {
           this.browser = null;
           this.context = null;
           this.currentPage = null;
+        } else if (this.currentPage) {
+          // Check if logged in by checking session health
+          try {
+            const sessionCheck = await this.checkSessionHealth(this.currentPage);
+            isLoggedIn = sessionCheck.valid;
+          } catch (error) {
+            console.error('Error checking login status:', error);
+            isLoggedIn = false;
+          }
         }
       } catch (error) {
         this.browser = null;
@@ -34,6 +45,7 @@ class PlaywrightService {
 
     return {
       isOpen: isActuallyOpen,
+      isLoggedIn: isLoggedIn,
       currentUrl: this.currentPage ? await this.getCurrentUrl() : null,
     };
   }

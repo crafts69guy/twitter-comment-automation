@@ -20,10 +20,17 @@ import {
   Stat,
   StatLabel,
   StatNumber,
-  StatHelpText
+  StatHelpText,
+  Tooltip,
 } from '@chakra-ui/react';
-import { FaPlay, FaStop, FaPause, FaStepForward, FaChrome, FaExternalLinkAlt } from 'react-icons/fa';
-import { BiRefresh } from 'react-icons/bi';
+import {
+  FaPlay,
+  FaStop,
+  FaPause,
+  FaStepForward,
+  FaChrome,
+  FaExternalLinkAlt,
+} from 'react-icons/fa';
 
 function CountdownTimer({ countdown }) {
   if (!countdown.remainingMs || countdown.remainingMs <= 0) {
@@ -65,19 +72,20 @@ function CurrentBatchTab({
   onResume,
   onForceNext,
   onOpenBrowser,
-  onCloseBrowser
+  onCloseBrowser,
 }) {
   const hasActiveBatch = currentBatchDetails && currentBatchDetails.batch;
 
   return (
     <VStack spacing={6} align="stretch">
-
       {/* Browser Status & Controls */}
       <Card>
         <CardBody>
           <HStack justify="space-between" mb={4}>
             <Box>
-              <Heading size="sm" mb={1}>Browser Status</Heading>
+              <Heading size="sm" mb={1}>
+                Browser Status
+              </Heading>
               <HStack>
                 <Badge colorScheme={browserStatus.isOpen ? 'green' : 'gray'}>
                   {browserStatus.isOpen ? 'Open' : 'Closed'}
@@ -104,42 +112,43 @@ function CurrentBatchTab({
       {/* Main Controls */}
       <Card>
         <CardBody>
-          <Heading size="sm" mb={4}>Automation Controls</Heading>
+          <Heading size="sm" mb={4}>
+            Automation Controls
+          </Heading>
 
           <SimpleGrid columns={[1, 2, 4]} spacing={3}>
             {!automationStatus.isActive ? (
-              <Button
-                colorScheme="green"
-                leftIcon={<Icon as={FaPlay} />}
-                onClick={onStart}
-                isDisabled={!browserStatus.isOpen}
+              <Tooltip
+                label={
+                  !browserStatus.isOpen
+                    ? 'Please open browser first'
+                    : !browserStatus.isLoggedIn
+                      ? 'Please wait for login to complete'
+                      : 'Start automation'
+                }
+                placement="top"
               >
-                Start Automation
-              </Button>
+                <Button
+                  colorScheme="green"
+                  leftIcon={<Icon as={FaPlay} />}
+                  onClick={onStart}
+                  isDisabled={!browserStatus.isOpen || !browserStatus.isLoggedIn}
+                >
+                  Start Automation
+                </Button>
+              </Tooltip>
             ) : (
               <>
-                <Button
-                  colorScheme="red"
-                  leftIcon={<Icon as={FaStop} />}
-                  onClick={onStop}
-                >
+                <Button colorScheme="red" leftIcon={<Icon as={FaStop} />} onClick={onStop}>
                   Stop
                 </Button>
 
                 {!automationStatus.isPaused ? (
-                  <Button
-                    colorScheme="orange"
-                    leftIcon={<Icon as={FaPause} />}
-                    onClick={onPause}
-                  >
+                  <Button colorScheme="orange" leftIcon={<Icon as={FaPause} />} onClick={onPause}>
                     Pause
                   </Button>
                 ) : (
-                  <Button
-                    colorScheme="blue"
-                    leftIcon={<Icon as={FaPlay} />}
-                    onClick={onResume}
-                  >
+                  <Button colorScheme="blue" leftIcon={<Icon as={FaPlay} />} onClick={onResume}>
                     Resume
                   </Button>
                 )}
@@ -185,7 +194,8 @@ function CurrentBatchTab({
                   Progress
                 </Text>
                 <Text fontSize="sm" color="gray.600">
-                  {currentBatchDetails.progress?.current || 0} / {currentBatchDetails.batch.links.length}
+                  {currentBatchDetails.progress?.current || 0} /{' '}
+                  {currentBatchDetails.batch.links.length}
                 </Text>
               </HStack>
               <Progress
@@ -257,37 +267,38 @@ function CurrentBatchTab({
                   const isSuccess = result?.status === 'success';
                   const isFailed = result?.status === 'failed';
 
+                  // Determine status color and label
+                  let statusColor = 'gray';
+                  let statusLabel = '⏸ Pending';
+
+                  if (isSuccess) {
+                    statusColor = 'green';
+                    statusLabel = '✓ Success';
+                  } else if (isFailed) {
+                    statusColor = 'red';
+                    statusLabel = '✗ Failed';
+                  } else if (isProcessing) {
+                    statusColor = 'blue';
+                    statusLabel = '⏳ Processing';
+                  } else if (isCompleted) {
+                    // Link was processed but no clear result
+                    statusColor = 'purple';
+                    statusLabel = '✓ Completed';
+                  }
+
                   return (
                     <HStack
                       key={link.id}
                       p={3}
-                      bg={isProcessing ? 'blue.50' : 'gray.50'}
+                      bg={isProcessing ? 'blue.50' : isCompleted ? 'gray.100' : 'gray.50'}
                       borderRadius="md"
                       justify="space-between"
                       borderLeft={isProcessing ? '4px solid' : 'none'}
                       borderColor="blue.500"
                     >
                       <HStack flex={1} spacing={3}>
-                        <Badge
-                          colorScheme={
-                            isSuccess ? 'green' :
-                            isFailed ? 'red' :
-                            isProcessing ? 'blue' :
-                            'gray'
-                          }
-                        >
-                          {isSuccess ? '✓ Success' :
-                           isFailed ? '✗ Failed' :
-                           isProcessing ? '⏳ Processing' :
-                           '⏸ Pending'}
-                        </Badge>
-                        <Link
-                          href={link.url}
-                          isExternal
-                          fontSize="sm"
-                          isTruncated
-                          maxW="500px"
-                        >
+                        <Badge colorScheme={statusColor}>{statusLabel}</Badge>
+                        <Link href={link.url} isExternal fontSize="sm" isTruncated maxW="500px">
                           Link {index + 1}
                         </Link>
                       </HStack>
@@ -326,14 +337,14 @@ function CurrentBatchTab({
       {/* Overall Stats Summary */}
       <Card>
         <CardBody>
-          <Heading size="sm" mb={4}>Overall Progress</Heading>
+          <Heading size="sm" mb={4}>
+            Overall Progress
+          </Heading>
           <SimpleGrid columns={[2, 4]} spacing={4}>
             <Stat>
               <StatLabel>Batches Completed</StatLabel>
               <StatNumber>{automationStatus.stats.totalBatchesCompleted}</StatNumber>
-              <StatHelpText>
-                of {automationStatus.stats.totalBatches} total
-              </StatHelpText>
+              <StatHelpText>of {automationStatus.stats.totalBatches} total</StatHelpText>
             </Stat>
             <Stat>
               <StatLabel>Links Processed</StatLabel>
@@ -341,15 +352,11 @@ function CurrentBatchTab({
             </Stat>
             <Stat>
               <StatLabel>Success</StatLabel>
-              <StatNumber color="green.500">
-                {automationStatus.stats.totalSuccessful}
-              </StatNumber>
+              <StatNumber color="green.500">{automationStatus.stats.totalSuccessful}</StatNumber>
             </Stat>
             <Stat>
               <StatLabel>Failed</StatLabel>
-              <StatNumber color="red.500">
-                {automationStatus.stats.totalFailed}
-              </StatNumber>
+              <StatNumber color="red.500">{automationStatus.stats.totalFailed}</StatNumber>
             </Stat>
           </SimpleGrid>
         </CardBody>
