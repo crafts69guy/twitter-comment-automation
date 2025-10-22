@@ -676,6 +676,20 @@ function App() {
 
   const openBrowser = async () => {
     try {
+      // First, sync settings to ensure backend has latest credentials
+      console.log('🔄 Syncing settings before opening browser...');
+      const syncResponse = await axios.post(`${API_BASE}/automation/update-settings`, settings, {
+        withCredentials: true,
+      });
+
+      if (!syncResponse.data.success) {
+        throw new Error('Failed to sync settings');
+      }
+
+      console.log('✅ Settings synced successfully');
+      setIsSynced(true);
+
+      // Now open browser with synced credentials
       const response = await axios.post(
         `${API_BASE}/browser/open`,
         {},

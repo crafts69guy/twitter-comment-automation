@@ -128,14 +128,16 @@ function CurrentBatchTab({
                 }
                 placement="top"
               >
-                <Button
-                  colorScheme="green"
-                  leftIcon={<Icon as={FaPlay} />}
-                  onClick={onStart}
-                  isDisabled={!browserStatus.isOpen || !browserStatus.isLoggedIn}
-                >
-                  Start Automation
-                </Button>
+                <span>
+                  <Button
+                    colorScheme="green"
+                    leftIcon={<Icon as={FaPlay} />}
+                    onClick={onStart}
+                    isDisabled={!browserStatus.isOpen || !browserStatus.isLoggedIn}
+                  >
+                    Start Automation
+                  </Button>
+                </span>
               </Tooltip>
             ) : (
               <>
@@ -166,12 +168,12 @@ function CurrentBatchTab({
           </SimpleGrid>
 
           {!browserStatus.isOpen && !automationStatus.isActive && (
-            <Alert status="warning" mt={4} borderRadius="md">
+            <Alert status="info" mt={4} borderRadius="md">
               <AlertIcon />
               <Box>
-                <AlertTitle>Browser Required</AlertTitle>
+                <AlertTitle>Ready to Start</AlertTitle>
                 <AlertDescription>
-                  Please open the browser before starting automation
+                  Click "Open Browser" to begin. Settings will be automatically synced before opening.
                 </AlertDescription>
               </Box>
             </Alert>
