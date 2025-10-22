@@ -174,6 +174,7 @@ router.post('/update-settings', (req, res) => {
       twitterBearerToken,
       twitterUsername,
       twitterPassword,
+      twitterVerificationHandle,
     } = req.body;
 
     if (batchSize !== undefined) {
@@ -195,6 +196,8 @@ router.post('/update-settings', (req, res) => {
       req.userSession.settings.twitterBearerToken = twitterBearerToken;
     if (twitterUsername !== undefined) req.userSession.settings.twitterUsername = twitterUsername;
     if (twitterPassword !== undefined) req.userSession.settings.twitterPassword = twitterPassword;
+    if (twitterVerificationHandle !== undefined)
+      req.userSession.settings.twitterVerificationHandle = twitterVerificationHandle;
 
     res.json({
       success: true,

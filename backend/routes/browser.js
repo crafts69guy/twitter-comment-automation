@@ -40,13 +40,15 @@ router.post('/open', async (req, res) => {
     const credentials = {
       username: req.userSession.settings.twitterUsername,
       password: req.userSession.settings.twitterPassword,
+      verificationHandle: req.userSession.settings.twitterVerificationHandle,
     };
 
     // Validate credentials
-    if (!credentials.username || !credentials.password) {
+    if (!credentials.username || !credentials.password || !credentials.verificationHandle) {
       return res.status(400).json({
         success: false,
-        message: 'Twitter credentials are required. Please configure username and password in Settings.',
+        message:
+          'Twitter credentials are required. Please configure username, password, and verification handle in Settings.',
       });
     }
 

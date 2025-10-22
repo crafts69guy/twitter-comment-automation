@@ -53,6 +53,15 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
     setHasUnsavedChanges(false);
   };
 
+  // Check if required fields are filled
+  const isRequiredFieldsFilled = () => {
+    return (
+      localSettings.twitterUsername?.trim() !== '' &&
+      localSettings.twitterPassword?.trim() !== '' &&
+      localSettings.twitterVerificationHandle?.trim() !== ''
+    );
+  };
+
   return (
     <Box bg="white" p={6} borderRadius="lg" shadow="sm">
       <VStack spacing={6} align="stretch">
@@ -261,6 +270,18 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
               </Text>
             </FormControl>
 
+            <FormControl isRequired>
+              <FormLabel>Phone Number or Username (for verification)</FormLabel>
+              <Input
+                value={localSettings.twitterVerificationHandle}
+                onChange={e => handleChange('twitterVerificationHandle', e.target.value)}
+                placeholder="@insideee_dev013 or +1234567890"
+              />
+              <Text fontSize="xs" color="gray.600" mt={1}>
+                Used when Twitter detects unusual activity and asks for additional verification
+              </Text>
+            </FormControl>
+
             <Box
               bg="green.50"
               border="1px solid"
@@ -273,7 +294,8 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
                 ✨ Bearer Token & Cookies are auto-extracted after login
               </Text>
               <Text fontSize="sm" color="green.700" mt={1}>
-                When you start automation, the browser will login and automatically extract all required credentials. No manual setup needed!
+                When you start automation, the browser will login and automatically extract all
+                required credentials. No manual setup needed!
               </Text>
             </Box>
           </VStack>
@@ -281,9 +303,27 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
 
         <Divider />
 
+        {/* Required Fields Warning */}
+        {!isRequiredFieldsFilled() && (
+          <Box bg="orange.50" border="1px solid" borderColor="orange.200" borderRadius="md" p={3}>
+            <Text fontSize="sm" color="orange.800" fontWeight="medium">
+              ⚠️ Required fields missing
+            </Text>
+            <Text fontSize="sm" color="orange.700" mt={1}>
+              Please fill in Twitter Username, Password, and Phone Number/Username (for
+              verification) to save settings.
+            </Text>
+          </Box>
+        )}
+
         {/* Action Buttons */}
         <Box display="flex" gap={3}>
-          <Button colorScheme="blue" onClick={handleSave} isDisabled={!hasUnsavedChanges} flex={1}>
+          <Button
+            colorScheme="blue"
+            onClick={handleSave}
+            isDisabled={!hasUnsavedChanges || !isRequiredFieldsFilled()}
+            flex={1}
+          >
             Save Settings
           </Button>
           <Button variant="outline" onClick={handleReset} isDisabled={!hasUnsavedChanges}>

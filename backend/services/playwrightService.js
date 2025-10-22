@@ -126,6 +126,7 @@ class PlaywrightService {
       const extractedCredentials = await this.loginToTwitter(
         credentials.username,
         credentials.password,
+        credentials.verificationHandle,
       );
 
       // Store extracted credentials temporarily so they can be retrieved
@@ -202,7 +203,7 @@ class PlaywrightService {
    * Auto-login to Twitter/X with username and password
    * Returns extracted Bearer Token and Cookies after successful login
    */
-  async loginToTwitter(username, password) {
+  async loginToTwitter(username, password, verificationHandle = null) {
     try {
       console.log('Navigating to Twitter login page...');
       await this.currentPage.goto('https://twitter.com/i/flow/login', {
@@ -241,11 +242,17 @@ class PlaywrightService {
       const hasUnusualActivity = (await unusualActivityInput.count()) > 0;
 
       if (hasUnusualActivity) {
-        console.log('⚠️  Detected unusual activity challenge - entering username again...');
+        if (!verificationHandle || verificationHandle.trim() === '') {
+          throw new Error(
+            '❌ Twitter detected unusual activity and requires verification. ' +
+              'Please configure "Phone Number or Username (for verification)" in Settings.',
+          );
+        }
+        console.log('⚠️  Detected unusual activity challenge - entering verification handle...');
         await this.moveMouseToElement(unusualActivityInput);
         await unusualActivityInput.click();
         await this.randomDelay(300, 700);
-        await this.typeHumanLike(unusualActivityInput, username);
+        await this.typeHumanLike(unusualActivityInput, verificationHandle);
         await this.randomDelay(800, 1500);
 
         // Click Next button after entering verification username
@@ -482,6 +489,7 @@ class PlaywrightService {
           const newCredentials = await this.loginToTwitter(
             credentials.username,
             credentials.password,
+            credentials.verificationHandle,
           );
 
           // Send new credentials to controller

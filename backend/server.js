@@ -81,6 +81,9 @@ const initializeSession = (userId) => {
         batchSize: 15,
         batchIntervalMinutes: 20,
         additionalPrompt: "",
+        twitterUsername: "",
+        twitterPassword: "",
+        twitterVerificationHandle: "",
         twitterCookies: "",
         twitterBearerToken: ""
       },

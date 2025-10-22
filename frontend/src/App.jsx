@@ -60,6 +60,7 @@ function App() {
       additionalPrompt: '',
       twitterUsername: '',
       twitterPassword: '',
+      twitterVerificationHandle: '',
       twitterCookies: '',
       twitterBearerToken: '',
     };

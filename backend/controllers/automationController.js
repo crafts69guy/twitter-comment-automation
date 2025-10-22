@@ -523,6 +523,7 @@ class AutomationController {
     const credentials = {
       username: this.session.settings.twitterUsername,
       password: this.session.settings.twitterPassword,
+      verificationHandle: this.session.settings.twitterVerificationHandle,
     };
 
     const result = await this.playwright.processBatchSequential(
