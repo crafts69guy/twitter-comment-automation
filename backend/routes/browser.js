@@ -18,25 +18,40 @@ router.get('/status', async (req, res) => {
 
     res.json({
       success: true,
-      ...status
+      ...status,
     });
   } catch (error) {
     console.error('Error getting browser status:', error);
     res.status(500).json({
       success: false,
       message: error.message,
-      isOpen: false
+      isOpen: false,
     });
   }
 });
 
 /**
  * POST /api/browser/open
- * Initialize browser
+ * Initialize browser with auto-login if credentials exist
  */
 router.post('/open', async (req, res) => {
   try {
-    await playwrightService.initialize();
+    // Get Twitter credentials from session settings
+    const credentials = {
+      username: req.userSession.settings.twitterUsername,
+      password: req.userSession.settings.twitterPassword,
+    };
+
+    // Validate credentials
+    if (!credentials.username || !credentials.password) {
+      return res.status(400).json({
+        success: false,
+        message: 'Twitter credentials are required. Please configure username and password in Settings.',
+      });
+    }
+
+    // Initialize browser with credentials for auto-login
+    await playwrightService.initialize(credentials);
 
     const status = await playwrightService.getBrowserStatus();
 
@@ -44,16 +59,31 @@ router.post('/open', async (req, res) => {
     req.userSession.browser.isOpen = true;
     req.userSession.browser.lastActivityAt = new Date();
 
+    // Check if credentials were extracted after login
+    if (playwrightService.extractedCredentials) {
+      const extracted = playwrightService.extractedCredentials;
+
+      // Save extracted credentials to session
+      req.userSession.settings.twitterBearerToken = extracted.bearerToken;
+      req.userSession.settings.twitterCookies = extracted.cookies;
+
+      console.log('✅ Extracted credentials saved to session');
+
+      // Clear from service
+      playwrightService.extractedCredentials = null;
+    }
+
     res.json({
       success: true,
       message: 'Browser opened successfully',
-      ...status
+      autoLoginAttempted: !!(credentials.username && credentials.password),
+      ...status,
     });
   } catch (error) {
     console.error('Error opening browser:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });
@@ -73,13 +103,13 @@ router.post('/close', async (req, res) => {
 
     res.json({
       success: true,
-      message: 'Browser closed successfully'
+      message: 'Browser closed successfully',
     });
   } catch (error) {
     console.error('Error closing browser:', error);
     res.status(500).json({
       success: false,
-      message: error.message
+      message: error.message,
     });
   }
 });

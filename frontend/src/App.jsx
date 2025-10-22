@@ -108,6 +108,28 @@ function App() {
 
   const [activityLogs, setActivityLogs] = useState([]);
 
+  // Sync settings to backend on mount
+  useEffect(() => {
+    const syncSettingsToBackend = async () => {
+      try {
+        const response = await axios.post(`${API_BASE}/automation/update-settings`, settings, {
+          withCredentials: true,
+        });
+
+        if (response.data.success) {
+          setIsSynced(true);
+        }
+      } catch (error) {
+        console.error('Error syncing settings to backend:', error);
+      }
+    };
+
+    // Only sync if settings contain some configuration
+    if (settings.twitterUsername || settings.googleSheetUrl) {
+      syncSettingsToBackend();
+    }
+  }, []); // Run once on mount
+
   // Helper function to add log entries (max 100 entries)
   const addLog = (type, title, message, details = null) => {
     const newLog = {
@@ -669,11 +691,12 @@ function App() {
       }
     } catch (error) {
       console.error('Error opening browser:', error);
+      const errorMessage = error.response?.data?.message || 'Failed to open browser';
       toast({
         title: 'Error',
-        description: 'Failed to open browser',
+        description: errorMessage,
         status: 'error',
-        duration: 3000,
+        duration: 5000,
       });
     }
   };

@@ -172,6 +172,8 @@ router.post('/update-settings', (req, res) => {
       googleSheetUrl,
       twitterCookies,
       twitterBearerToken,
+      twitterUsername,
+      twitterPassword,
     } = req.body;
 
     if (batchSize !== undefined) {
@@ -191,6 +193,8 @@ router.post('/update-settings', (req, res) => {
     if (twitterCookies !== undefined) req.userSession.settings.twitterCookies = twitterCookies;
     if (twitterBearerToken !== undefined)
       req.userSession.settings.twitterBearerToken = twitterBearerToken;
+    if (twitterUsername !== undefined) req.userSession.settings.twitterUsername = twitterUsername;
+    if (twitterPassword !== undefined) req.userSession.settings.twitterPassword = twitterPassword;
 
     res.json({
       success: true,

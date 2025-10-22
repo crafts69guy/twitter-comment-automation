@@ -106,7 +106,7 @@ class PlaywrightService {
 
     this.currentPage = await this.context.newPage();
 
-    console.log('Browser initialized with Playwright');
+    console.log('Browser initialized with Playwright', JSON.stringify(credentials));
 
     // Auto-login if credentials provided
     if (credentials && credentials.username && credentials.password) {
