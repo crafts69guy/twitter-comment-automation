@@ -25,16 +25,10 @@ class AutomationController {
         await this.syncGoogleSheets();
       }
 
-      // Step 2: Fetch tweet content for links that don't have content
-      await this.fetchTweetContentForAll();
-
-      // Step 3: Generate AI comments for links that don't have them
-      await this.generateCommentsForAll();
-
-      // Step 4: Divide into batches
+      // Step 2: Divide into batches (without content/comments)
       this.createBatches();
 
-      // Step 5: Start processing first batch
+      // Step 3: Start processing first batch
       this.session.automation.isActive = true;
       this.emitSSE(this.userId, 'automation:started', {
         totalBatches: this.session.batches.length,
@@ -133,21 +127,21 @@ class AutomationController {
    * Fetch tweet content for all links that don't have content
    */
   /**
-   * Fetch tweet content for all links that don't have content
+   * Fetch tweet content for a specific batch of links that don't have content
    * This is REQUIRED - links without content will be skipped
    */
-  async fetchTweetContentForAll() {
-    const linksWithoutContent = this.session.allLinks.filter(
+  async fetchTweetContentForBatch(batchLinks) {
+    const linksWithoutContent = batchLinks.filter(
       link => !link.content || link.content.trim() === '',
     );
 
     if (linksWithoutContent.length === 0) {
-      console.log('[AutomationController] All links already have content');
+      console.log('[AutomationController] All links in batch already have content');
       return;
     }
 
     console.log(
-      `[AutomationController] Fetching tweet content for ${linksWithoutContent.length} links...`,
+      `[AutomationController] Fetching tweet content for ${linksWithoutContent.length} links in batch...`,
     );
 
     const { twitterCookies, twitterBearerToken } = this.session.settings;
@@ -160,17 +154,12 @@ class AutomationController {
         'Twitter API credentials are required to fetch tweet content. ' +
         'Please configure Twitter Cookies and Bearer Token in Settings.';
       console.error(`[AutomationController] ${errorMsg}`);
-      
+
       // Emit error to frontend
       this.emitSSE(this.userId, 'error', {
         message: 'Twitter API credentials missing',
         details: errorMsg,
       });
-
-      // Don't throw error, just skip these links
-      console.log(
-        `[AutomationController] Skipping ${linksWithoutContent.length} links without content`,
-      );
 
       // Mark these links as having content error
       linksWithoutContent.forEach(link => {
@@ -192,7 +181,7 @@ class AutomationController {
     let failedCount = 0;
 
     contentResults.forEach(result => {
-      const link = this.session.allLinks.find(l => l.id === result.linkId);
+      const link = batchLinks.find(l => l.id === result.linkId);
       if (link) {
         if (result.success) {
           link.content = result.content;
@@ -210,7 +199,7 @@ class AutomationController {
     });
 
     console.log(
-      `[AutomationController] Fetched content: ${successCount} success, ${failedCount} failed`,
+      `[AutomationController] Fetched content for batch: ${successCount} success, ${failedCount} failed`,
     );
 
     this.emitSSE(this.userId, 'content:fetched', {
@@ -222,21 +211,21 @@ class AutomationController {
     // If all failed, emit warning
     if (failedCount > 0 && successCount === 0) {
       this.emitSSE(this.userId, 'error', {
-        message: 'Failed to fetch any tweet content',
+        message: 'Failed to fetch any tweet content for batch',
         details: 'Check your Twitter API credentials and try again',
       });
     }
   }
 
   /**
-   * Generate AI comments for all links that don't have them
+   * Generate AI comments for a specific batch of links that don't have them
    * ONLY generates comments for links that have valid content
    */
-  async generateCommentsForAll() {
-    const linksWithoutComments = this.session.allLinks.filter(link => !link.comment);
+  async generateCommentsForBatch(batchLinks) {
+    const linksWithoutComments = batchLinks.filter(link => !link.comment);
 
     if (linksWithoutComments.length === 0) {
-      console.log('[AutomationController] All links already have comments');
+      console.log('[AutomationController] All links in batch already have comments');
       return;
     }
 
@@ -251,43 +240,31 @@ class AutomationController {
 
     if (linksWithoutContent.length > 0) {
       console.warn(
-        `[AutomationController] Skipping ${linksWithoutContent.length} links without valid content`,
+        `[AutomationController] Skipping ${linksWithoutContent.length} links in batch without valid content`,
       );
 
       // Emit warning to frontend
       this.emitSSE(this.userId, 'warning', {
-        message: `${linksWithoutContent.length} links skipped - no content available`,
+        message: `${linksWithoutContent.length} links skipped in batch - no content available`,
         details:
           'These links will not be processed. Configure Twitter API credentials to fetch tweet content.',
       });
 
-      // Remove these links from allLinks (they will not be processed)
-      this.session.allLinks = this.session.allLinks.filter(
-        link => !linksWithoutContent.includes(link),
-      );
-
-      // Add to failed links
+      // Mark these links in the batch as failed
       linksWithoutContent.forEach(link => {
-        this.session.failedLinks.push({
-          linkId: link.id,
-          url: link.url,
-          comment: '',
-          content: link.content || '',
-          batchNumber: 0,
-          error: link.contentError || 'No content available - Twitter API not configured',
-          failedAt: new Date(),
-          canRetry: false, // Cannot retry without fixing API credentials
-        });
+        link.skipReason = link.contentError || 'No content available - Twitter API not configured';
       });
     }
 
     if (linksReadyForComments.length === 0) {
-      console.log('[AutomationController] No links with valid content for comment generation');
+      console.log(
+        '[AutomationController] No links with valid content for comment generation in batch',
+      );
       return;
     }
 
     console.log(
-      `[AutomationController] Generating comments for ${linksReadyForComments.length} links...`,
+      `[AutomationController] Generating comments for ${linksReadyForComments.length} links in batch...`,
     );
 
     const { aiProvider, additionalPrompt } = this.session.settings;
@@ -330,13 +307,13 @@ class AutomationController {
 
     // Update links with generated comments
     comments.forEach(commentData => {
-      const link = this.session.allLinks.find(l => l.id === commentData.postId);
+      const link = batchLinks.find(l => l.id === commentData.postId);
       if (link) {
         link.comment = commentData.comment;
       }
     });
 
-    console.log(`[AutomationController] Generated ${comments.length} comments`);
+    console.log(`[AutomationController] Generated ${comments.length} comments for batch`);
 
     this.emitSSE(this.userId, 'comments:generated', {
       count: comments.length,
@@ -350,13 +327,12 @@ class AutomationController {
     const batchSize = this.session.settings.batchSize || 15;
     this.session.batches = [];
 
-    const linksToProcess = this.session.allLinks.filter(link => link.comment);
-
-    for (let i = 0; i < linksToProcess.length; i += batchSize) {
+    // Create batches from all links (regardless of content/comments)
+    for (let i = 0; i < this.session.allLinks.length; i += batchSize) {
       this.session.batches.push({
         batchId: uuidv4(),
         batchNumber: Math.floor(i / batchSize) + 1,
-        links: linksToProcess.slice(i, i + batchSize),
+        links: this.session.allLinks.slice(i, i + batchSize),
         status: 'pending',
         successCount: 0,
         failedCount: 0,
@@ -418,9 +394,66 @@ class AutomationController {
       },
     });
 
-    // Process batch with callbacks
+    // Step 1: Fetch tweet content for this batch
+    await this.fetchTweetContentForBatch(nextBatch.links);
+
+    // Step 2: Generate AI comments for this batch
+    await this.generateCommentsForBatch(nextBatch.links);
+
+    // Filter out links that couldn't be processed (no content/comment)
+    const linksToProcess = nextBatch.links.filter(link => link.comment && !link.skipReason);
+    const skippedLinks = nextBatch.links.filter(link => !link.comment || link.skipReason);
+
+    // Archive skipped links if any
+    if (skippedLinks.length > 0) {
+      console.log(
+        `[AutomationController] Skipping ${skippedLinks.length} links without valid content/comment`,
+      );
+      skippedLinks.forEach(link => {
+        this.session.failedLinks.push({
+          linkId: link.id,
+          url: link.url,
+          comment: link.comment || '',
+          content: link.content || '',
+          batchNumber: nextBatch.batchNumber,
+          error: link.skipReason || link.contentError || 'No content or comment available',
+          failedAt: new Date(),
+          canRetry: false,
+        });
+      });
+    }
+
+    // If no links to process, skip to next batch
+    if (linksToProcess.length === 0) {
+      console.log('[AutomationController] No valid links to process in batch, moving to next');
+      nextBatch.status = 'completed';
+      nextBatch.endTime = new Date();
+      nextBatch.failedCount = skippedLinks.length;
+
+      this.deleteBatchLinks(nextBatch);
+      this.session.currentBatch = null;
+      this.session.automation.totalBatchesCompleted++;
+
+      this.emitSSE(this.userId, 'batch:completed', {
+        batch: {
+          batchId: nextBatch.batchId,
+          batchNumber: nextBatch.batchNumber,
+          status: nextBatch.status,
+          successCount: 0,
+          failedCount: nextBatch.failedCount,
+        },
+      });
+
+      // Only schedule next batch if automation is still active
+      if (this.session.automation.isActive) {
+        this.scheduleNextBatch();
+      }
+      return;
+    }
+
+    // Step 3: Process batch with Puppeteer (only valid links)
     const result = await this.puppeteer.processBatchSequential(
-      nextBatch.links,
+      linksToProcess,
       progress => {
         // Progress callback
         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
