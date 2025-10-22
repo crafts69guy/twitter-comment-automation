@@ -213,55 +213,69 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
 
         <Divider />
 
-        {/* Twitter API Configuration (Required) */}
+        {/* Twitter Authentication Configuration */}
         <Box>
           <Heading size="sm" mb={2}>
-            Twitter API Configuration
+            Twitter Authentication
           </Heading>
           <Box
-            bg="orange.50"
+            bg="blue.50"
             border="1px solid"
-            borderColor="orange.200"
+            borderColor="blue.200"
             borderRadius="md"
             p={3}
             mb={4}
           >
-            <Text fontSize="sm" color="orange.800" fontWeight="medium">
-              ⚠️ Required for automation
+            <Text fontSize="sm" color="blue.800" fontWeight="medium">
+              🔐 Auto-Login with Username & Password
             </Text>
-            <Text fontSize="sm" color="orange.700" mt={1}>
-              Twitter API credentials are required to fetch tweet content. Without them, links
-              cannot be processed and will be skipped.
+            <Text fontSize="sm" color="blue.700" mt={1}>
+              Browser will automatically login before starting automation. Bearer token and cookies
+              are still needed for content fetching.
             </Text>
           </Box>
 
           <VStack spacing={4} align="stretch">
             <FormControl isRequired>
-              <FormLabel>Bearer Token</FormLabel>
+              <FormLabel>Twitter Username</FormLabel>
               <Input
-                type="password"
-                value={localSettings.twitterBearerToken}
-                onChange={e => handleChange('twitterBearerToken', e.target.value)}
-                placeholder="Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D..."
+                value={localSettings.twitterUsername}
+                onChange={e => handleChange('twitterUsername', e.target.value)}
+                placeholder="@username or email"
               />
               <Text fontSize="xs" color="gray.600" mt={1}>
-                Get from Twitter/X web app network requests (header: Authorization)
+                Your Twitter/X username or email
               </Text>
             </FormControl>
 
             <FormControl isRequired>
-              <FormLabel>Cookies (JSON or string)</FormLabel>
-              <Textarea
-                value={localSettings.twitterCookies}
-                onChange={e => handleChange('twitterCookies', e.target.value)}
-                placeholder='{"auth_token": "your_token", "ct0": "your_csrf_token"}'
-                rows={3}
+              <FormLabel>Twitter Password</FormLabel>
+              <Input
+                type="password"
+                value={localSettings.twitterPassword}
+                onChange={e => handleChange('twitterPassword', e.target.value)}
+                placeholder="Enter your Twitter password"
               />
               <Text fontSize="xs" color="gray.600" mt={1}>
-                Export cookies from Twitter/X using browser extension (Cookie Editor,
-                EditThisCookie)
+                Password is stored locally in browser cache only
               </Text>
             </FormControl>
+
+            <Box
+              bg="green.50"
+              border="1px solid"
+              borderColor="green.200"
+              borderRadius="md"
+              p={3}
+              mt={2}
+            >
+              <Text fontSize="sm" color="green.800" fontWeight="medium">
+                ✨ Bearer Token & Cookies are auto-extracted after login
+              </Text>
+              <Text fontSize="sm" color="green.700" mt={1}>
+                When you start automation, the browser will login and automatically extract all required credentials. No manual setup needed!
+              </Text>
+            </Box>
           </VStack>
         </Box>
 

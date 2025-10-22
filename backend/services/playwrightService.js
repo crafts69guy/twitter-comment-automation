@@ -9,6 +9,7 @@ class PlaywrightService {
     this.isProcessing = false;
     this.shouldPause = false;
     this.shouldStop = false;
+    this.extractedCredentials = null; // Store extracted credentials temporarily
   }
 
   async getBrowserStatus() {
@@ -33,7 +34,7 @@ class PlaywrightService {
 
     return {
       isOpen: isActuallyOpen,
-      currentUrl: this.currentPage ? await this.getCurrentUrl() : null
+      currentUrl: this.currentPage ? await this.getCurrentUrl() : null,
     };
   }
 
@@ -46,14 +47,14 @@ class PlaywrightService {
     }
   }
 
-  async ensureBrowserOpen() {
+  async ensureBrowserOpen(credentials = null) {
     if (!this.browser || !this.browser.isConnected()) {
-      await this.initialize();
+      await this.initialize(credentials);
     }
     return this.currentPage;
   }
 
-  async initialize() {
+  async initialize(credentials = null) {
     if (this.browser && this.browser.isConnected()) {
       console.log('Browser already open');
       return;
@@ -97,7 +98,8 @@ class PlaywrightService {
     // Create browser context with realistic settings
     this.context = await this.browser.newContext({
       viewport: { width: 1920, height: 1080 },
-      userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      userAgent:
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       locale: 'en-US',
       timezoneId: 'America/New_York',
     });
@@ -105,6 +107,150 @@ class PlaywrightService {
     this.currentPage = await this.context.newPage();
 
     console.log('Browser initialized with Playwright');
+
+    // Auto-login if credentials provided
+    if (credentials && credentials.username && credentials.password) {
+      console.log('Credentials provided, attempting auto-login...');
+      const extractedCredentials = await this.loginToTwitter(
+        credentials.username,
+        credentials.password,
+      );
+
+      // Store extracted credentials temporarily so they can be retrieved
+      if (extractedCredentials) {
+        this.extractedCredentials = extractedCredentials;
+      }
+    }
+  }
+
+  /**
+   * Auto-login to Twitter/X with username and password
+   * Returns extracted Bearer Token and Cookies after successful login
+   */
+  async loginToTwitter(username, password) {
+    try {
+      console.log('Navigating to Twitter login page...');
+      await this.currentPage.goto('https://twitter.com/i/flow/login', {
+        waitUntil: 'networkidle',
+        timeout: 30000,
+      });
+
+      await this.currentPage.waitForTimeout(2000);
+
+      // Step 1: Enter username/email
+      console.log('Entering username...');
+      const usernameInput = this.currentPage.locator('input[autocomplete="username"]');
+      await usernameInput.waitFor({ timeout: 10000 });
+      await usernameInput.fill(username);
+      await this.currentPage.waitForTimeout(1000);
+
+      // Click "Next" button
+      const nextButton = this.currentPage.locator('button:has-text("Next")').first();
+      await nextButton.click();
+      console.log('Clicked Next button');
+
+      await this.currentPage.waitForTimeout(2000);
+
+      // Step 2: Enter password
+      console.log('Entering password...');
+      const passwordInput = this.currentPage.locator('input[name="password"]');
+      await passwordInput.waitFor({ timeout: 10000 });
+      await passwordInput.fill(password);
+      await this.currentPage.waitForTimeout(1000);
+
+      // Click "Log in" button
+      const loginButton = this.currentPage.locator('button[data-testid="LoginForm_Login_Button"]');
+      await loginButton.click();
+      console.log('Clicked Login button');
+
+      // Wait for navigation to home page
+      await this.currentPage.waitForURL('**/home', { timeout: 15000 });
+      console.log('✅ Successfully logged in to Twitter');
+
+      await this.currentPage.waitForTimeout(3000);
+
+      // Extract Bearer Token and Cookies after successful login
+      console.log('📦 Extracting Bearer Token and Cookies...');
+      const credentials = await this.extractCredentialsFromBrowser();
+
+      if (credentials.bearerToken && credentials.cookies) {
+        console.log('✅ Successfully extracted credentials from browser');
+        return credentials;
+      } else {
+        console.warn('⚠️  Could not extract all credentials, will use existing ones');
+        return null;
+      }
+    } catch (error) {
+      console.error('❌ Error during Twitter login:', error.message);
+      throw new Error(`Twitter login failed: ${error.message}`);
+    }
+  }
+
+  /**
+   * Extract Bearer Token and Cookies from browser after login
+   */
+  async extractCredentialsFromBrowser() {
+    try {
+      // Get cookies from browser context
+      const cookies = await this.context.cookies();
+
+      // Extract important cookies
+      const cookieObj = {};
+      cookies.forEach(cookie => {
+        if (['auth_token', 'ct0', 'twid', 'guest_id'].includes(cookie.name)) {
+          cookieObj[cookie.name] = cookie.value;
+        }
+      });
+
+      console.log('🍪 Extracted cookies:', Object.keys(cookieObj));
+
+      // Extract Bearer Token from network requests
+      let bearerToken = null;
+
+      // Listen to network requests to capture Authorization header
+      const bearerTokenPromise = new Promise(resolve => {
+        const timeout = setTimeout(() => resolve(null), 5000);
+
+        this.currentPage.on('request', request => {
+          const headers = request.headers();
+          if (headers['authorization'] && headers['authorization'].startsWith('Bearer ')) {
+            clearTimeout(timeout);
+            resolve(headers['authorization']);
+          }
+        });
+      });
+
+      // Navigate to trigger API calls
+      await this.currentPage.goto('https://twitter.com/home', { waitUntil: 'networkidle' });
+      bearerToken = await bearerTokenPromise;
+
+      if (!bearerToken) {
+        // Fallback: Try to get from localStorage/sessionStorage
+        bearerToken = await this.currentPage.evaluate(() => {
+          // Check common places where Bearer token might be stored
+          const localStorageToken = localStorage.getItem('twitter_bearer_token');
+          if (localStorageToken) return localStorageToken;
+
+          // Try to find in window object
+          if (window.__INITIAL_STATE__?.token) return window.__INITIAL_STATE__.token;
+
+          return null;
+        });
+      }
+
+      console.log('🔑 Bearer Token found:', bearerToken ? 'Yes' : 'No');
+
+      return {
+        bearerToken: bearerToken || '',
+        cookies: JSON.stringify(cookieObj),
+      };
+    } catch (error) {
+      console.error('❌ Error extracting credentials:', error.message);
+      return {
+        bearerToken: '',
+        cookies: '',
+      };
+    }
   }
 
   getChromePaths(platform) {
@@ -131,12 +277,28 @@ class PlaywrightService {
   /**
    * Process batch sequentially with single tab
    * @param {Array} links - Array of link objects { id, url, comment, content }
+   * @param {Object} credentials - Twitter credentials { username, password }
    * @param {Function} onProgress - Callback for progress updates
    * @param {Function} onLinkComplete - Callback when each link completes
+   * @param {Function} onCredentialsExtracted - Callback when credentials are extracted from browser
    * @returns {Object} - { completed: bool, stopped: bool, results: array, processedCount: number }
    */
-  async processBatchSequential(links, onProgress, onLinkComplete) {
-    const page = await this.ensureBrowserOpen();
+  async processBatchSequential(
+    links,
+    credentials,
+    onProgress,
+    onLinkComplete,
+    onCredentialsExtracted,
+  ) {
+    const page = await this.ensureBrowserOpen(credentials);
+
+    // Check if credentials were extracted during login
+    if (this.extractedCredentials && onCredentialsExtracted) {
+      console.log('📤 Sending extracted credentials to controller...');
+      onCredentialsExtracted(this.extractedCredentials);
+      this.extractedCredentials = null; // Clear after sending
+    }
+
     const results = [];
     this.isProcessing = true;
     this.shouldStop = false;
@@ -166,7 +328,7 @@ class PlaywrightService {
           currentIndex: i,
           total: links.length,
           currentLink: link,
-          percentage: Math.round(((i + 1) / links.length) * 100)
+          percentage: Math.round(((i + 1) / links.length) * 100),
         });
       }
 
@@ -174,7 +336,7 @@ class PlaywrightService {
         // Navigate to link with Playwright's more reliable wait
         await page.goto(link.url, {
           waitUntil: 'networkidle',
-          timeout: 30000
+          timeout: 30000,
         });
 
         console.log(`Navigated to: ${link.url}`);
@@ -188,7 +350,7 @@ class PlaywrightService {
         const result = {
           linkId: link.id,
           status: 'success',
-          processedAt: new Date()
+          processedAt: new Date(),
         };
 
         results.push(result);
@@ -198,7 +360,6 @@ class PlaywrightService {
         if (onLinkComplete) {
           onLinkComplete(result);
         }
-
       } catch (error) {
         console.error(`❌ Error processing link ${i + 1}:`, error.message);
 
@@ -206,7 +367,7 @@ class PlaywrightService {
           linkId: link.id,
           status: 'failed',
           error: error.message,
-          processedAt: new Date()
+          processedAt: new Date(),
         };
 
         results.push(result);
@@ -231,7 +392,7 @@ class PlaywrightService {
       completed: true,
       stopped: false,
       results,
-      processedCount: links.length
+      processedCount: links.length,
     };
   }
 
@@ -264,11 +425,11 @@ class PlaywrightService {
 
       // Wait for first cell container
       await page.waitForSelector('[data-testid="cellInnerDiv"]', {
-        timeout: 10000
+        timeout: 10000,
       });
 
       // Check if already liked
-      const isLiked = await page.locator('[data-testid="unlike"]').count() > 0;
+      const isLiked = (await page.locator('[data-testid="unlike"]').count()) > 0;
 
       if (isLiked) {
         console.log('Post already liked, skipping...');
@@ -277,8 +438,8 @@ class PlaywrightService {
 
       // Find and click like button using Playwright's auto-wait
       const likeButton = page.locator('[data-testid="like"]').first();
-      
-      if (await likeButton.count() > 0) {
+
+      if ((await likeButton.count()) > 0) {
         await likeButton.click();
         console.log('✅ Post liked');
 
@@ -287,7 +448,6 @@ class PlaywrightService {
       } else {
         console.log('Like button not found');
       }
-
     } catch (error) {
       console.error('Error liking post:', error.message);
       // Continue even if like fails
@@ -336,7 +496,6 @@ class PlaywrightService {
       } else {
         throw new Error('Submit button not found or not enabled');
       }
-
     } catch (error) {
       console.error('Error replying to post:', error.message);
       throw error;
@@ -349,26 +508,25 @@ class PlaywrightService {
   async waitForEnabledSubmitButton(page, maxWaitTime = 15000) {
     try {
       const submitButton = page.locator('button[data-testid="tweetButtonInline"]');
-      
+
       // Wait for button to be visible and enabled
-      await submitButton.waitFor({ 
+      await submitButton.waitFor({
         state: 'visible',
-        timeout: maxWaitTime 
+        timeout: maxWaitTime,
       });
-      
+
       // Wait for button to be enabled (not disabled)
       await page.waitForFunction(
-        (selector) => {
+        selector => {
           const btn = document.querySelector(selector);
           return btn && !btn.disabled;
         },
         'button[data-testid="tweetButtonInline"]',
-        { timeout: maxWaitTime }
+        { timeout: maxWaitTime },
       );
 
       console.log('Submit button is enabled');
       return submitButton;
-
     } catch (error) {
       console.error('Submit button did not become enabled within timeout');
       return null;
@@ -401,7 +559,7 @@ class PlaywrightService {
       this.context = null;
       this.currentPage = null;
     }
-    
+
     if (this.browser) {
       console.log('Closing browser...');
       await this.browser.close();
@@ -413,8 +571,8 @@ class PlaywrightService {
   /**
    * Scrape tweet (legacy method for compatibility)
    */
-  async scrapeTweet(url) {
-    const page = await this.ensureBrowserOpen();
+  async scrapeTweet(url, credentials = null) {
+    const page = await this.ensureBrowserOpen(credentials);
 
     try {
       await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
@@ -426,7 +584,7 @@ class PlaywrightService {
           userName: '[data-testid="User-Name"]',
           like: '[data-testid="like"]',
           retweet: '[data-testid="retweet"]',
-          reply: '[data-testid="reply"]'
+          reply: '[data-testid="reply"]',
         };
 
         const getText = () => {
@@ -435,7 +593,9 @@ class PlaywrightService {
 
           const spans = document.querySelectorAll('[data-testid="tweetText"] span');
           if (spans.length > 0) {
-            return Array.from(spans).map(span => span.innerText).join(' ');
+            return Array.from(spans)
+              .map(span => span.innerText)
+              .join(' ');
           }
 
           return null;
@@ -446,7 +606,7 @@ class PlaywrightService {
         const userElement = document.querySelector(selectors.userName);
         const userName = userElement ? userElement.innerText.split('\n')[0] : null;
 
-        const getMetric = (selector) => {
+        const getMetric = selector => {
           const element = document.querySelector(selector);
           if (!element) return 0;
           const ariaLabel = element.getAttribute('aria-label');
@@ -460,22 +620,21 @@ class PlaywrightService {
           author: userName,
           likes: getMetric(selectors.like),
           retweets: getMetric(selectors.retweet),
-          replies: getMetric(selectors.reply)
+          replies: getMetric(selectors.reply),
         };
       });
 
       return {
         success: true,
         url,
-        ...tweetData
+        ...tweetData,
       };
-
     } catch (error) {
       console.error('Error scraping tweet:', error.message);
       return {
         success: false,
         url,
-        error: error.message
+        error: error.message,
       };
     }
   }

@@ -21,8 +21,10 @@ const DEFAULT_SETTINGS = {
   batchSize: 15,
   batchIntervalMinutes: 20,
   additionalPrompt: '',
-  twitterCookies: '',
-  twitterBearerToken: '',
+  twitterUsername: '',
+  twitterPassword: '',
+  // Bearer Token and Cookies are auto-extracted after login
+  // They are not part of default settings but will be populated automatically
 };
 
 export function SettingsProvider({ children }) {
@@ -33,7 +35,11 @@ export function SettingsProvider({ children }) {
       if (stored) {
         const parsed = JSON.parse(stored);
         console.log('Loaded settings from localStorage:', parsed);
-        return parsed;
+        // Merge with defaults to ensure all required fields exist
+        return {
+          ...DEFAULT_SETTINGS,
+          ...parsed,
+        };
       }
     } catch (error) {
       console.error('Error loading settings from localStorage:', error);
@@ -86,17 +92,15 @@ export function SettingsProvider({ children }) {
   }, []);
 
   // Update settings (saves to both localStorage and backend)
-  const updateSettings = async (newSettings) => {
+  const updateSettings = async newSettings => {
     try {
       // Optimistically update local state and localStorage
       setSettings(newSettings);
 
       // Update backend
-      const response = await axios.post(
-        `${API_BASE}/automation/update-settings`,
-        newSettings,
-        { withCredentials: true }
-      );
+      const response = await axios.post(`${API_BASE}/automation/update-settings`, newSettings, {
+        withCredentials: true,
+      });
 
       if (response.data.success) {
         const updatedSettings = response.data.settings;

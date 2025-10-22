@@ -452,8 +452,15 @@ class AutomationController {
     }
 
     // Step 3: Process batch with Playwright (only valid links)
+    // Pass Twitter credentials for auto-login
+    const credentials = {
+      username: this.session.settings.twitterUsername,
+      password: this.session.settings.twitterPassword,
+    };
+
     const result = await this.playwright.processBatchSequential(
       linksToProcess,
+      credentials,
       progress => {
         // Progress callback
         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
@@ -465,6 +472,30 @@ class AutomationController {
       linkResult => {
         // Link complete callback
         this.handleLinkResult(nextBatch, linkResult);
+      },
+      extractedCredentials => {
+        // Credentials extracted callback
+        if (extractedCredentials && extractedCredentials.bearerToken) {
+          console.log('📥 Received extracted credentials from browser');
+
+          // Update session settings with extracted credentials
+          if (extractedCredentials.bearerToken) {
+            this.session.settings.twitterBearerToken = extractedCredentials.bearerToken;
+            console.log('✅ Updated Bearer Token in session');
+          }
+
+          if (extractedCredentials.cookies) {
+            this.session.settings.twitterCookies = extractedCredentials.cookies;
+            console.log('✅ Updated Cookies in session');
+          }
+
+          // Emit event to frontend to update UI
+          this.emitSSE(this.userId, 'credentials:extracted', {
+            bearerToken: extractedCredentials.bearerToken ? '✅ Extracted' : '',
+            cookies: extractedCredentials.cookies ? '✅ Extracted' : '',
+            message: 'Bearer Token and Cookies extracted from browser successfully!',
+          });
+        }
       },
     );
 

@@ -63,6 +63,16 @@ function App() {
     };
   };
 
+  // Save settings to localStorage
+  const saveSettingsToStorage = (newSettings) => {
+    try {
+      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
+      console.log('Saved settings to localStorage:', newSettings);
+    } catch (error) {
+      console.error('Error saving settings to localStorage:', error);
+    }
+  };
+
   // State management
   const [settings, setSettings] = useState(loadSettingsFromStorage());
   const [isSynced, setIsSynced] = useState(false);
@@ -122,7 +132,7 @@ function App() {
         'success',
         'Automation Started',
         `Processing ${data.totalBatches} batches with ${data.totalLinks} links`,
-        data
+        data,
       );
       toast({
         title: 'Automation Started',
@@ -139,7 +149,7 @@ function App() {
         'info',
         `Batch ${data.batch.batchNumber} Started`,
         `Processing ${data.batch.totalLinks} links`,
-        data.batch
+        data.batch,
       );
       toast({
         title: `Batch ${data.batch.batchNumber} Started`,
@@ -182,7 +192,7 @@ function App() {
         data.batch.failedCount > 0 ? 'warning' : 'success',
         `Batch ${data.batch.batchNumber} Completed`,
         `Success: ${data.batch.successCount}, Failed: ${data.batch.failedCount}`,
-        data.batch
+        data.batch,
       );
       toast({
         title: `Batch ${data.batch.batchNumber} Completed`,
@@ -262,7 +272,7 @@ function App() {
         'success',
         'Automation Completed',
         `All batches processed. Success: ${data.stats.totalSuccessful}, Failed: ${data.stats.totalFailed}`,
-        data.stats
+        data.stats,
       );
       toast({
         title: 'Automation Completed',
@@ -279,7 +289,7 @@ function App() {
         'warning',
         'Batch Skipped',
         `Skipped ${data.skippedLinks} links from batch ${data.batchNumber}`,
-        data
+        data,
       );
       toast({
         title: 'Batch Skipped',
@@ -295,13 +305,49 @@ function App() {
         'success',
         'Google Sheets Synced',
         `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
-        data
+        data,
       );
       toast({
-        title: 'Google Sheets Synced',
-        description: `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+        title: 'Sheets Synced',
+        description: `Added ${data.newLinks} new links`,
         status: 'success',
         duration: 3000,
+      });
+    },
+
+    'credentials:extracted': data => {
+      console.log('Credentials extracted:', data);
+      addLog(
+        'success',
+        'Credentials Extracted',
+        data.message || 'Bearer Token and Cookies extracted from browser',
+        data,
+      );
+
+      // Update local settings with extracted credentials
+      if (data.bearerToken || data.cookies) {
+        setSettings(prev => {
+          const updated = { ...prev };
+          if (data.bearerToken && data.bearerToken !== prev.twitterBearerToken) {
+            updated.twitterBearerToken = data.bearerToken;
+          }
+          if (data.cookies && data.cookies !== prev.twitterCookies) {
+            updated.twitterCookies = data.cookies;
+          }
+
+          // Save to localStorage
+          saveSettingsToStorage(updated);
+
+          return updated;
+        });
+      }
+
+      toast({
+        title: '✅ Credentials Extracted!',
+        description: 'Bearer Token and Cookies have been automatically extracted from browser',
+        status: 'success',
+        duration: 5000,
+        isClosable: true,
       });
     },
 
@@ -322,7 +368,7 @@ function App() {
         data.failedCount > 0 ? 'warning' : 'success',
         'Tweet Content Fetched',
         `Fetched ${data.successCount}/${data.totalLinks} tweets (${data.failedCount} failed)`,
-        data
+        data,
       );
       toast({
         title: 'Tweet Content Fetched',
@@ -358,7 +404,7 @@ function App() {
   };
 
   // Initialize SSE connection
-  const { isConnected, reconnect } = useSSE(SSE_URL, sseEventHandlers, true);
+  const { isConnected } = useSSE(SSE_URL, sseEventHandlers, true);
 
   // API functions
   const fetchAutomationStatus = async () => {
@@ -565,7 +611,7 @@ function App() {
       if (response.data.success) {
         const updatedSettings = response.data.settings;
         setSettings(updatedSettings);
-        
+
         // Save to localStorage
         try {
           localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(updatedSettings));
@@ -574,13 +620,13 @@ function App() {
         } catch (storageError) {
           console.error('Error saving settings to localStorage:', storageError);
         }
-        
+
         toast({
           title: 'Settings Updated',
           status: 'success',
           duration: 1000,
         });
-        
+
         return { success: true, settings: updatedSettings };
       }
       return { success: false, error: 'Failed to update settings' };
@@ -655,14 +701,14 @@ function App() {
         const statusResponse = await axios.get(`${API_BASE}/automation/status`, {
           withCredentials: true,
         });
-        
+
         if (statusResponse.data.success && statusResponse.data.settings) {
           const backendSettings = statusResponse.data.settings;
-          
+
           // Merge backend settings with localStorage (backend takes priority)
           setSettings(prevSettings => {
             const mergedSettings = { ...prevSettings, ...backendSettings };
-            
+
             // Update localStorage with backend settings
             try {
               localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(mergedSettings));
@@ -671,7 +717,7 @@ function App() {
             } catch (error) {
               console.error('Error saving to localStorage:', error);
             }
-            
+
             return mergedSettings;
           });
         }
@@ -790,10 +836,7 @@ function App() {
 
               {/* Activity Log Tab */}
               <TabPanel>
-                <ActivityLogTab
-                  logs={activityLogs}
-                  onClearLogs={() => setActivityLogs([])}
-                />
+                <ActivityLogTab logs={activityLogs} onClearLogs={() => setActivityLogs([])} />
               </TabPanel>
             </TabPanels>
           </Tabs>
