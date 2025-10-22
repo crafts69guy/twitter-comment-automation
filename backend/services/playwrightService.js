@@ -136,6 +136,69 @@ class PlaywrightService {
   }
 
   /**
+   * Random delay between min and max milliseconds
+   */
+  async randomDelay(min, max) {
+    const delay = Math.floor(Math.random() * (max - min + 1)) + min;
+    await this.currentPage.waitForTimeout(delay);
+  }
+
+  /**
+   * Move mouse to element with human-like curve movement
+   */
+  async moveMouseToElement(element) {
+    try {
+      const box = await element.boundingBox();
+      if (!box) return;
+
+      // Random point within element bounds
+      const targetX = box.x + box.width * (0.3 + Math.random() * 0.4);
+      const targetY = box.y + box.height * (0.3 + Math.random() * 0.4);
+
+      // Move mouse with smooth steps
+      await this.currentPage.mouse.move(targetX, targetY, {
+        steps: Math.floor(Math.random() * 10) + 5, // 5-15 steps
+      });
+
+      await this.randomDelay(50, 150);
+    } catch (error) {
+      // Ignore mouse movement errors
+      console.log('Mouse movement skipped:', error.message);
+    }
+  }
+
+  /**
+   * Type text in a human-like manner with random delays
+   */
+  async typeHumanLike(element, text) {
+    for (let i = 0; i < text.length; i++) {
+      // Random typing speed between 50-150ms per character
+      const charDelay = Math.floor(Math.random() * 100) + 50;
+
+      // Occasionally add longer pauses (simulating thinking)
+      const shouldPause = Math.random() < 0.1; // 10% chance
+      if (shouldPause && i > 0) {
+        await this.currentPage.waitForTimeout(Math.random() * 300 + 200);
+      }
+
+      // Type single character
+      await element.pressSequentially(text[i], { delay: charDelay });
+
+      // Occasionally simulate typo and correction (5% chance)
+      const shouldTypo = Math.random() < 0.05 && i < text.length - 1;
+      if (shouldTypo) {
+        // Random wrong character
+        const wrongChar = String.fromCharCode(97 + Math.floor(Math.random() * 26));
+        await element.pressSequentially(wrongChar, { delay: 80 });
+        await this.currentPage.waitForTimeout(100 + Math.random() * 200);
+        // Delete wrong character
+        await element.press('Backspace');
+        await this.currentPage.waitForTimeout(50 + Math.random() * 100);
+      }
+    }
+  }
+
+  /**
    * Auto-login to Twitter/X with username and password
    * Returns extracted Bearer Token and Cookies after successful login
    */
@@ -143,35 +206,76 @@ class PlaywrightService {
     try {
       console.log('Navigating to Twitter login page...');
       await this.currentPage.goto('https://twitter.com/i/flow/login', {
-        waitUntil: 'networkidle',
-        timeout: 30000,
+        waitUntil: 'domcontentloaded',
+        timeout: 60000,
       });
 
-      await this.currentPage.waitForTimeout(2000);
+      // Wait for page to load and settle
+      await this.currentPage.waitForTimeout(3000);
 
       // Step 1: Enter username/email
       console.log('Entering username...');
       const usernameInput = this.currentPage.locator('input[autocomplete="username"]');
       await usernameInput.waitFor({ timeout: 10000 });
-      await usernameInput.fill(username);
-      await this.currentPage.waitForTimeout(1000);
+
+      // Move mouse to input field and click (human-like)
+      await this.moveMouseToElement(usernameInput);
+      await usernameInput.click();
+      await this.randomDelay(300, 700);
+
+      // Type username with random delays like a human
+      await this.typeHumanLike(usernameInput, username);
+      await this.randomDelay(500, 1500);
 
       // Click "Next" button
       const nextButton = this.currentPage.locator('button:has-text("Next")').first();
+      await this.moveMouseToElement(nextButton);
+      await this.randomDelay(200, 500);
       await nextButton.click();
       console.log('Clicked Next button');
 
-      await this.currentPage.waitForTimeout(2000);
+      await this.currentPage.waitForTimeout(3000);
+
+      // Check for unusual activity challenge (phone/username verification)
+      const unusualActivityInput = this.currentPage.locator('input[name="text"]');
+      const hasUnusualActivity = (await unusualActivityInput.count()) > 0;
+
+      if (hasUnusualActivity) {
+        console.log('⚠️  Detected unusual activity challenge - entering username again...');
+        await this.moveMouseToElement(unusualActivityInput);
+        await unusualActivityInput.click();
+        await this.randomDelay(300, 700);
+        await this.typeHumanLike(unusualActivityInput, username);
+        await this.randomDelay(800, 1500);
+
+        // Click Next button after entering verification username
+        const verifyNextButton = this.currentPage.locator('button:has-text("Next")').first();
+        await this.moveMouseToElement(verifyNextButton);
+        await this.randomDelay(200, 500);
+        await verifyNextButton.click();
+        console.log('Clicked Next button after verification');
+
+        await this.randomDelay(2000, 4000);
+      }
 
       // Step 2: Enter password
       console.log('Entering password...');
       const passwordInput = this.currentPage.locator('input[name="password"]');
       await passwordInput.waitFor({ timeout: 10000 });
-      await passwordInput.fill(password);
-      await this.currentPage.waitForTimeout(1000);
+
+      // Move mouse and click password field to focus
+      await this.moveMouseToElement(passwordInput);
+      await passwordInput.click();
+      await this.randomDelay(300, 700);
+
+      // Type password with human-like behavior
+      await this.typeHumanLike(passwordInput, password);
+      await this.randomDelay(500, 1200);
 
       // Click "Log in" button
       const loginButton = this.currentPage.locator('button[data-testid="LoginForm_Login_Button"]');
+      await this.moveMouseToElement(loginButton);
+      await this.randomDelay(300, 600);
       await loginButton.click();
       console.log('Clicked Login button');
 
@@ -263,7 +367,10 @@ class PlaywrightService {
       });
 
       // Navigate to trigger API calls
-      await this.currentPage.goto('https://twitter.com/home', { waitUntil: 'networkidle' });
+      await this.currentPage.goto('https://twitter.com/home', {
+        waitUntil: 'domcontentloaded',
+        timeout: 30000,
+      });
       bearerToken = await bearerTokenPromise;
 
       if (!bearerToken) {
@@ -416,14 +523,14 @@ class PlaywrightService {
       try {
         // Navigate to link with Playwright's more reliable wait
         await page.goto(link.url, {
-          waitUntil: 'networkidle',
-          timeout: 30000,
+          waitUntil: 'domcontentloaded',
+          timeout: 60000,
         });
 
         console.log(`Navigated to: ${link.url}`);
 
-        // Wait for page to settle
-        await page.waitForTimeout(3000);
+        // Wait for page to settle and load dynamic content
+        await page.waitForTimeout(5000);
 
         // Auto-reply workflow: Like + Comment
         await this.autoReplyOnPage(page, link.comment);
@@ -521,11 +628,13 @@ class PlaywrightService {
       const likeButton = page.locator('[data-testid="like"]').first();
 
       if ((await likeButton.count()) > 0) {
+        await this.moveMouseToElement(likeButton);
+        await this.randomDelay(300, 800);
         await likeButton.click();
         console.log('✅ Post liked');
 
         // Post-like delay
-        await page.waitForTimeout(5000);
+        await this.randomDelay(3000, 6000);
       } else {
         console.log('Like button not found');
       }
@@ -544,6 +653,8 @@ class PlaywrightService {
 
       // Click reply button to open reply textarea
       const replyButton = page.locator('[data-testid="reply"]').first();
+      await this.moveMouseToElement(replyButton);
+      await this.randomDelay(400, 900);
       await replyButton.click();
       console.log('Clicked reply button');
 
@@ -552,28 +663,32 @@ class PlaywrightService {
       await textarea.waitFor({ timeout: 10000 });
       console.log('Reply textarea found');
 
-      // Click textarea to focus
+      // Move mouse and click textarea to focus
+      await this.moveMouseToElement(textarea);
+      await this.randomDelay(300, 700);
       await textarea.click();
-      await page.waitForTimeout(1000);
+      await this.randomDelay(500, 1000);
 
-      // Type comment with natural timing using Playwright's type
+      // Type comment with human-like behavior
       console.log(`Typing comment: "${comment}"`);
-      await textarea.type(comment, { delay: 30 });
+      await this.typeHumanLike(textarea, comment);
 
       console.log('Comment typed successfully');
 
-      // Wait before submitting
-      await page.waitForTimeout(3000);
+      // Wait before submitting (human-like pause to review)
+      await this.randomDelay(2000, 4000);
 
       // Find and click submit button
       const submitButton = await this.waitForEnabledSubmitButton(page);
 
       if (submitButton) {
+        await this.moveMouseToElement(submitButton);
+        await this.randomDelay(400, 900);
         await submitButton.click();
         console.log('✅ Reply submitted');
 
         // Final delay to ensure reply is posted
-        await page.waitForTimeout(3000);
+        await this.randomDelay(2500, 4000);
       } else {
         throw new Error('Submit button not found or not enabled');
       }
@@ -656,7 +771,7 @@ class PlaywrightService {
     const page = await this.ensureBrowserOpen(credentials);
 
     try {
-      await page.goto(url, { waitUntil: 'networkidle', timeout: 30000 });
+      await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 60000 });
       await page.waitForTimeout(8000);
 
       const tweetData = await page.evaluate(() => {
