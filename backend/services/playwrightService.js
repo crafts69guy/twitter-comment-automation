@@ -337,17 +337,17 @@ class PlaywrightService {
           console.log(`💡 Typo simulation: typing "${wrongChar}" instead of "${char}"`);
 
           // Type wrong character FIRST
-          await element.pressSequentially(wrongChar, { delay: this.gaussianRandom(80, 20) });
+          await element.pressSequentially(wrongChar, { delay: this.gaussianRandom(40, 10) });
 
           // Pause when noticing typo (human reaction time)
-          await this.currentPage.waitForTimeout(this.gaussianRandom(300, 100));
+          await this.currentPage.waitForTimeout(this.gaussianRandom(150, 50));
 
           // Delete wrong character
           await element.press('Backspace');
-          await this.currentPage.waitForTimeout(this.gaussianRandom(150, 50));
+          await this.currentPage.waitForTimeout(this.gaussianRandom(75, 25));
 
           // Now type the CORRECT character (slower, more careful)
-          await element.pressSequentially(char, { delay: this.gaussianRandom(150, 40) });
+          await element.pressSequentially(char, { delay: this.gaussianRandom(75, 20) });
           console.log(`✅ Typo corrected: "${char}"`);
         } else {
           // No typo - type character normally
@@ -371,8 +371,8 @@ class PlaywrightService {
         // Longer pause at sentence boundaries
         const justTypedPunctuation = /[.!?]/.test(previousChar);
         const pauseDuration = justTypedPunctuation
-          ? this.gaussianRandom(800, 200) // Longer pause after sentences
-          : this.gaussianRandom(400, 150); // Regular thinking pause
+          ? this.gaussianRandom(300, 100) // Longer pause after sentences
+          : this.gaussianRandom(150, 50); // Regular thinking pause
 
         await this.currentPage.waitForTimeout(pauseDuration);
 
@@ -382,7 +382,7 @@ class PlaywrightService {
         const readingPauseChance = justTypedPunctuation ? 0.25 : 0.15;
         if (Math.random() < readingPauseChance) {
           // Simulate reading by pausing longer
-          await this.currentPage.waitForTimeout(this.gaussianRandom(1000, 300));
+          await this.currentPage.waitForTimeout(this.gaussianRandom(400, 150));
 
           // Small mouse movement (looking at text)
           await this.randomMouseWiggle();
@@ -391,7 +391,7 @@ class PlaywrightService {
     }
 
     // Final pause after finishing typing (reviewing before submit)
-    await this.currentPage.waitForTimeout(this.gaussianRandom(800, 250));
+    await this.currentPage.waitForTimeout(this.gaussianRandom(300, 100));
   }
 
   /**
@@ -1145,7 +1145,7 @@ class PlaywrightService {
       // Human behavior: Pause before clicking textarea (reading/preparing to type)
       // Users don't immediately click the reply box - they think about what to say
       console.log('Preparing to type reply...');
-      await this.randomDelay(1000, 2500);
+      await this.randomDelay(800, 1500);
 
       // Check stop flag before clicking textarea
       if (this.shouldStop) {
@@ -1156,7 +1156,7 @@ class PlaywrightService {
       await this.moveMouseToElement(textarea);
       await this.randomDelay(300, 700);
       await textarea.click();
-      await this.randomDelay(800, 1500);
+      await this.randomDelay(800, 1200);
       console.log('Focused on inline reply textarea');
 
       // Check stop flag before typing
@@ -1179,7 +1179,7 @@ class PlaywrightService {
       if (onStatusUpdate) {
         onStatusUpdate('reviewing', 'Reviewing reply before submitting...', '3/4');
       }
-      await this.randomDelay(2000, 4000);
+      await this.randomDelay(1300, 3000);
 
       // Check stop flag before submitting
       if (this.shouldStop) {
@@ -1205,7 +1205,7 @@ class PlaywrightService {
         console.log('✅ Reply submitted');
 
         // Final delay to ensure reply is posted
-        await this.randomDelay(2500, 4000);
+        await this.randomDelay(2000, 3500);
 
         // Check stop flag after submission
         if (this.shouldStop) {
@@ -1221,7 +1221,7 @@ class PlaywrightService {
         }, checkScrollAmount);
 
         // Wait and "read" the posted reply
-        await this.randomDelay(1500, 3000);
+        await this.randomDelay(1300, 2400);
 
         // Check stop flag after checking reply
         if (this.shouldStop) {
