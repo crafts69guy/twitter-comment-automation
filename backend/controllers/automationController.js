@@ -929,10 +929,18 @@ class AutomationController {
       this.retryCountdownIntervals.delete(batch.batchId);
     }
 
-    // Check if automation is still active
+    // Check if automation is still active and not paused
     if (!this.session.automation.isActive) {
       console.log('[AutomationController] Automation not active, skipping retry');
       this.session.automation.retryPending = false;
+      return;
+    }
+
+    if (this.session.automation.isPaused) {
+      console.log('[AutomationController] Automation paused, rescheduling retry');
+      // Reschedule retry with same delay
+      const delayMinutes = 5; // Default retry delay
+      this.scheduleRetry(batch, retryableFailures, delayMinutes);
       return;
     }
 
@@ -1267,9 +1275,16 @@ class AutomationController {
 
     // Countdown timer
     this.countdownInterval = setInterval(() => {
-      // Check if automation is still active during countdown
+      // Check if automation is still active and not paused during countdown
       if (!this.session.automation.isActive) {
         console.log('[AutomationController] Automation stopped during countdown');
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
+        return;
+      }
+
+      if (this.session.automation.isPaused) {
+        console.log('[AutomationController] Automation paused during countdown');
         clearInterval(this.countdownInterval);
         this.countdownInterval = null;
         return;
@@ -1298,9 +1313,26 @@ class AutomationController {
     this.session.automation.isPaused = true;
     this.playwright.setPause(true);
 
+    // Save remaining time before clearing interval
+    if (this.session.automation.nextBatchTime) {
+      const remainingMs = new Date(this.session.automation.nextBatchTime) - Date.now();
+      if (remainingMs > 0) {
+        this.session.automation.pausedRemainingMs = remainingMs;
+        console.log(`[AutomationController] Saved remaining time: ${remainingMs}ms`);
+      }
+    }
+
     if (this.countdownInterval) {
       clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
     }
+
+    // Pause retry countdowns (but keep retry timers - they will reschedule on resume)
+    this.retryCountdownIntervals.forEach((intervalId, batchId) => {
+      clearInterval(intervalId);
+      console.log(`[AutomationController] Paused retry countdown for batch ${batchId}`);
+    });
+    this.retryCountdownIntervals.clear();
 
     this.emitSSE(this.userId, 'automation:paused', {
       currentBatch: this.session.currentBatch,
@@ -1320,25 +1352,75 @@ class AutomationController {
     this.session.automation.isPaused = false;
     this.playwright.setPause(false);
 
-    // Restart countdown if there's a scheduled next batch time
-    if (this.session.automation.nextBatchTime) {
+    // Check if we have saved remaining time from pause
+    const hasSavedTime =
+      this.session.automation.pausedRemainingMs && this.session.automation.pausedRemainingMs > 0;
+
+    if (hasSavedTime) {
+      // Use saved remaining time from pause
+      const remainingMs = this.session.automation.pausedRemainingMs;
+      const nextRunTime = new Date(Date.now() + remainingMs);
+
+      // Update nextBatchTime with new calculated time
+      this.session.automation.nextBatchTime = nextRunTime;
+
+      // Clear saved time
+      delete this.session.automation.pausedRemainingMs;
+
+      console.log(
+        `[AutomationController] Resuming with saved remaining time: ${remainingMs}ms, next run at ${nextRunTime}`,
+      );
+
+      // Clear any existing countdown interval first
+      if (this.countdownInterval) {
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
+      }
+
+      // Restart countdown timer with correct remaining time
+      this.countdownInterval = setInterval(() => {
+        // Check if automation is still active during countdown
+        if (!this.session.automation.isActive || this.session.automation.isPaused) {
+          console.log('[AutomationController] Automation paused/stopped during countdown');
+          clearInterval(this.countdownInterval);
+          this.countdownInterval = null;
+          return;
+        }
+
+        const remaining = nextRunTime - Date.now();
+
+        if (remaining <= 0) {
+          clearInterval(this.countdownInterval);
+          this.countdownInterval = null;
+          this.processNextBatch();
+        } else {
+          this.emitSSE(this.userId, 'countdown:update', {
+            remainingMs: remaining,
+            nextBatchTime: nextRunTime,
+          });
+        }
+      }, 1000);
+
+      // Emit initial countdown update with correct time
+      this.emitSSE(this.userId, 'countdown:update', {
+        remainingMs: remainingMs,
+        nextBatchTime: nextRunTime,
+      });
+    } else if (this.session.automation.nextBatchTime) {
+      // Fallback to original logic if no saved time
       const nextRunTime = new Date(this.session.automation.nextBatchTime);
       const remainingMs = nextRunTime - Date.now();
 
-      // Only restart countdown if there's still time remaining
       if (remainingMs > 0) {
-        console.log('[AutomationController] Restarting countdown after resume...');
+        console.log('[AutomationController] Restarting countdown after resume (fallback)...');
 
-        // Clear any existing countdown interval first
         if (this.countdownInterval) {
           clearInterval(this.countdownInterval);
+          this.countdownInterval = null;
         }
 
-        // Restart countdown timer
         this.countdownInterval = setInterval(() => {
-          // Check if automation is still active during countdown
           if (!this.session.automation.isActive || this.session.automation.isPaused) {
-            console.log('[AutomationController] Automation paused/stopped during countdown');
             clearInterval(this.countdownInterval);
             this.countdownInterval = null;
             return;
@@ -1358,7 +1440,6 @@ class AutomationController {
           }
         }, 1000);
 
-        // Emit initial countdown update
         this.emitSSE(this.userId, 'countdown:update', {
           remainingMs: remainingMs,
           nextBatchTime: nextRunTime,
@@ -1393,8 +1474,9 @@ class AutomationController {
       this.countdownInterval = null;
     }
 
-    // Clear next batch time
+    // Clear next batch time and saved pause time
     this.session.automation.nextBatchTime = null;
+    delete this.session.automation.pausedRemainingMs;
 
     // ✅ CLEAR ALL RETRY TIMERS AND COUNTDOWNS
     this.retryTimers.forEach((timerId, batchId) => {
