@@ -209,7 +209,9 @@ function CurrentBatchTab({
                       colorScheme="purple"
                       leftIcon={<Icon as={FaStepForward} />}
                       onClick={handleForceNext}
-                      isDisabled={!hasActiveBatch || cooldownSeconds > 0}
+                      isDisabled={
+                        (!hasActiveBatch && countdown.remainingMs <= 0) || cooldownSeconds > 0
+                      }
                     >
                       {cooldownSeconds > 0 ? `Force Next (${cooldownSeconds}s)` : 'Force Next'}
                     </Button>
