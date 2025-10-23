@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   VStack,
@@ -75,6 +76,22 @@ function CurrentBatchTab({
   onCloseBrowser,
 }) {
   const hasActiveBatch = currentBatchDetails && currentBatchDetails.batch;
+  const [cooldownSeconds, setCooldownSeconds] = useState(0);
+
+  const handleForceNext = useCallback(() => {
+    onForceNext();
+    setCooldownSeconds(10);
+  }, [onForceNext]);
+
+  useEffect(() => {
+    if (cooldownSeconds > 0) {
+      const timer = setTimeout(() => {
+        setCooldownSeconds(cooldownSeconds - 1);
+      }, 1000);
+
+      return () => clearTimeout(timer);
+    }
+  }, [cooldownSeconds]);
 
   return (
     <VStack spacing={6} align="stretch">
@@ -155,14 +172,25 @@ function CurrentBatchTab({
                   </Button>
                 )}
 
-                <Button
-                  colorScheme="purple"
-                  leftIcon={<Icon as={FaStepForward} />}
-                  onClick={onForceNext}
-                  isDisabled={!hasActiveBatch}
+                <Tooltip
+                  label={
+                    cooldownSeconds > 0
+                      ? `Wait ${cooldownSeconds}s before next force`
+                      : 'Skip countdown and start next batch immediately'
+                  }
+                  placement="top"
                 >
-                  Force Next
-                </Button>
+                  <span>
+                    <Button
+                      colorScheme="purple"
+                      leftIcon={<Icon as={FaStepForward} />}
+                      onClick={handleForceNext}
+                      isDisabled={!hasActiveBatch || cooldownSeconds > 0}
+                    >
+                      {cooldownSeconds > 0 ? `Force Next (${cooldownSeconds}s)` : 'Force Next'}
+                    </Button>
+                  </span>
+                </Tooltip>
               </>
             )}
           </SimpleGrid>
