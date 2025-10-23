@@ -161,11 +161,17 @@ function App() {
       const response = await axios.get(`${API_BASE}/batches/current`, {
         withCredentials: true,
       });
-      if (response.data.success && response.data.currentBatch) {
-        setCurrentBatchDetails(response.data.currentBatch);
+      if (response.data.success) {
+        if (response.data.currentBatch) {
+          console.log('✅ Current batch fetched:', response.data.currentBatch);
+          setCurrentBatchDetails(response.data.currentBatch);
+        } else {
+          console.log('ℹ️ No current batch processing');
+          setCurrentBatchDetails(null);
+        }
       }
     } catch (error) {
-      console.error('Error fetching current batch:', error);
+      console.error('❌ Error fetching current batch:', error);
     }
   }, []);
 
@@ -198,47 +204,6 @@ function App() {
       console.error('Error fetching browser status:', error);
     }
   }, []);
-
-  const startAutomation = useCallback(async () => {
-    try {
-      // Sync settings to backend before starting (to ensure latest credentials are sent)
-      console.log('🔄 Syncing settings before starting automation...');
-      console.log('📊 Current credentials in localStorage:', {
-        hasBearerToken: !!settings.twitterBearerToken,
-        bearerTokenLength: settings.twitterBearerToken?.length || 0,
-        hasCookies: !!settings.twitterCookies,
-        cookiesLength: settings.twitterCookies?.length || 0,
-      });
-
-      await axios.post(`${API_BASE}/automation/update-settings`, settings, {
-        withCredentials: true,
-      });
-
-      const response = await axios.post(
-        `${API_BASE}/automation/start`,
-        {},
-        {
-          withCredentials: true,
-        },
-      );
-      if (response.data.success) {
-        toast({
-          title: 'Automation Starting',
-          description: response.data.message,
-          status: 'success',
-          duration: 2000,
-        });
-      }
-    } catch (error) {
-      console.error('Error starting automation:', error);
-      toast({
-        title: 'Error',
-        description: error.response?.data?.message || 'Failed to start automation',
-        status: 'error',
-        duration: 3000,
-      });
-    }
-  }, [settings, toast]);
 
   const stopAutomation = useCallback(async () => {
     try {
@@ -416,6 +381,29 @@ function App() {
       console.log('✅ Settings synced successfully');
       setIsSynced(true);
 
+      // Auto-sync Google Sheets if no links exist yet
+      if (automationStatus.stats.totalBatches === 0 && settings.googleSheetUrl) {
+        console.log('📊 No links found, auto-syncing Google Sheets...');
+        toast({
+          title: 'Auto-syncing Sheets',
+          description: 'Fetching links from Google Sheets...',
+          status: 'info',
+          duration: 2000,
+        });
+
+        try {
+          await syncGoogleSheets();
+
+          // IMPORTANT: Wait for sync to complete and refresh status
+          console.log('⏳ Waiting for sync to complete and refreshing status...');
+          await new Promise(resolve => setTimeout(resolve, 1000)); // Give backend time to update
+          await fetchAutomationStatus(); // Refresh status immediately after sync
+          console.log('✅ Status refreshed after sync');
+        } catch (syncError) {
+          console.warn('⚠️ Auto-sync failed, but continuing to open browser:', syncError);
+        }
+      }
+
       // Now open browser with synced credentials
       const response = await axios.post(
         `${API_BASE}/browser/open`,
@@ -473,7 +461,7 @@ function App() {
         duration: 5000,
       });
     }
-  }, [addLog, settings, toast]);
+  }, [addLog, settings, toast, automationStatus.stats.totalBatches, syncGoogleSheets, fetchAutomationStatus]);
 
   const closeBrowser = useCallback(async () => {
     try {
@@ -552,7 +540,6 @@ function App() {
   const sseEventHandlers = useMemo(
     () => ({
       'automation:started': data => {
-        console.log('Automation started:', data);
         addLog(
           'success',
           'Automation Started',
@@ -569,7 +556,7 @@ function App() {
       },
 
       'batch:started': data => {
-        console.log('Batch started:', data);
+        console.log('📦 Batch started event received:', data);
         addLog(
           'info',
           `Batch ${data.batch.batchNumber} Started`,
@@ -582,7 +569,11 @@ function App() {
           status: 'info',
           duration: 2000,
         });
+
+        // Immediately fetch current batch details to update UI
         fetchCurrentBatch();
+        // Also refresh overall status
+        fetchAutomationStatus();
       },
 
       'link:processing': data => {
@@ -987,6 +978,59 @@ function App() {
 
   // Initialize SSE connection
   const { isConnected, eventSource } = useSSE(SSE_URL, sseEventHandlers, true);
+
+  const startAutomation = useCallback(async () => {
+    try {
+      // Check SSE connection first
+      if (!isConnected) {
+        toast({
+          title: 'Connection Error',
+          description:
+            'Real-time connection not established. Please refresh the page and try again.',
+          status: 'error',
+          duration: 5000,
+        });
+        return;
+      }
+
+      // IMPORTANT: Refresh browser status before starting
+      // This ensures we have the latest login status
+      console.log('🔄 Refreshing browser status before starting automation...');
+      await fetchBrowserStatus();
+
+      // Small delay to ensure state is updated
+      await new Promise(resolve => setTimeout(resolve, 300));
+
+      // Sync settings to backend before starting
+      await axios.post(`${API_BASE}/automation/update-settings`, settings, {
+        withCredentials: true,
+      });
+
+      const response = await axios.post(
+        `${API_BASE}/automation/start`,
+        {},
+        {
+          withCredentials: true,
+        },
+      );
+      if (response.data.success) {
+        toast({
+          title: 'Automation Starting',
+          description: response.data.message,
+          status: 'success',
+          duration: 2000,
+        });
+      }
+    } catch (error) {
+      console.error('Error starting automation:', error);
+      toast({
+        title: 'Error',
+        description: error.response?.data?.message || 'Failed to start automation',
+        status: 'error',
+        duration: 5000,
+      });
+    }
+  }, [settings, toast, isConnected, fetchBrowserStatus]);
 
   return (
     <ChakraProvider>

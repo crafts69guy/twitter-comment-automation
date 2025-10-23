@@ -117,7 +117,20 @@ class PlaywrightService {
 
     this.currentPage = await this.context.newPage();
 
-    console.log('✅ Browser initialized with Playwright (Manual login mode)');
+    // Navigate to Twitter home page by default
+    // console.log('Navigating to Twitter home page...');
+    // try {
+    //   await this.currentPage.goto('https://x.com/', {
+    //     waitUntil: 'domcontentloaded',
+    //     timeout: 120000,
+    //   });
+    //   console.log(
+    //     '✅ Browser initialized with Playwright (Manual login mode) - Twitter home page loaded',
+    //   );
+    // } catch (error) {
+    //   console.log('⚠️  Failed to load Twitter home page:', error.message);
+    //   console.log('✅ Browser initialized with Playwright (Manual login mode)');
+    // }
   }
 
   /**
@@ -466,7 +479,7 @@ class PlaywrightService {
       if (!sessionCheck.valid) {
         console.error(`❌ Session expired: ${sessionCheck.reason}`);
         console.error('⚠️ Please login manually in the browser to continue');
-        
+
         // Stop batch processing if session expired
         this.isProcessing = false;
         return {

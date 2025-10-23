@@ -221,17 +221,62 @@ function CurrentBatchTab({
             )}
           </SimpleGrid>
 
-          {!browserStatus.isOpen && !automationStatus.isActive && (
-            <Alert status="info" mt={4} borderRadius="md">
-              <AlertIcon />
-              <Box>
-                <AlertTitle>Ready to Start</AlertTitle>
-                <AlertDescription>
-                  Click "Open Browser" to begin. Settings will be automatically synced before
-                  opening.
-                </AlertDescription>
-              </Box>
-            </Alert>
+          {/* Setup Guide - Show when not active */}
+          {!automationStatus.isActive && (
+            <Box mt={4}>
+              {/* No links warning */}
+              {automationStatus.stats.totalBatches === 0 ? (
+                <Alert status="warning" borderRadius="md" mb={3}>
+                  <AlertIcon />
+                  <Box flex={1}>
+                    <AlertTitle>No Links Found</AlertTitle>
+                    <AlertDescription>
+                      Please sync Google Sheets in Settings tab to fetch links before starting
+                      automation.
+                      {!browserStatus.isOpen && (
+                        <Text mt={2} fontSize="sm">
+                          💡 Tip: Links will be auto-synced when you open the browser if Google
+                          Sheet URL is configured.
+                        </Text>
+                      )}
+                    </AlertDescription>
+                  </Box>
+                </Alert>
+              ) : (
+                <Alert status="success" borderRadius="md" mb={3}>
+                  <AlertIcon />
+                  <Box flex={1}>
+                    <AlertTitle>
+                      Ready! {automationStatus.stats.totalBatches} batches with{' '}
+                      {automationStatus.stats.totalBatches *
+                        (automationStatus.stats.totalBatches > 0 ? 15 : 0)}{' '}
+                      links loaded
+                    </AlertTitle>
+                    <AlertDescription>
+                      {!browserStatus.isOpen
+                        ? 'Click "Open Browser" to begin.'
+                        : browserStatus.isLoggedIn
+                          ? 'Click "Start Automation" to begin processing.'
+                          : 'Please login to Twitter in the browser to continue.'}
+                    </AlertDescription>
+                  </Box>
+                </Alert>
+              )}
+
+              {/* Browser not open info */}
+              {!browserStatus.isOpen && automationStatus.stats.totalBatches > 0 && (
+                <Alert status="info" borderRadius="md">
+                  <AlertIcon />
+                  <Box>
+                    <AlertTitle>Next Step</AlertTitle>
+                    <AlertDescription>
+                      Click "Open Browser" to continue. Browser will open Twitter home page
+                      automatically.
+                    </AlertDescription>
+                  </Box>
+                </Alert>
+              )}
+            </Box>
           )}
         </CardBody>
       </Card>

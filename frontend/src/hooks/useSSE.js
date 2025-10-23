@@ -10,7 +10,7 @@ import { useEffect, useRef, useCallback, useState } from 'react';
 export const useSSE = (url, eventHandlers = {}, enabled = true) => {
   const eventSourceRef = useRef(null);
   const [eventSource, setEventSource] = useState(null);
-  const isConnectedRef = useRef(false);
+  const [isConnected, setIsConnected] = useState(false); // Use state instead of ref
   const reconnectTimeoutRef = useRef(null);
   const eventHandlersRef = useRef(eventHandlers);
 
@@ -24,27 +24,23 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
       return;
     }
 
-    console.log('[SSE] Connecting to:', url);
-
     try {
       const eventSource = new EventSource(url, { withCredentials: true });
       eventSourceRef.current = eventSource;
-      setEventSource(eventSource); // Update state to trigger re-render
+      setEventSource(eventSource);
 
       // Handle connection open
       eventSource.onopen = () => {
-        console.log('[SSE] Connection opened');
-        isConnectedRef.current = true;
+        console.log('[SSE] Connected');
+        setIsConnected(true);
       };
 
       // Handle initial connection event
       eventSource.onmessage = event => {
         try {
           const data = JSON.parse(event.data);
-          console.log('[SSE] Received data:', data);
-
           if (data.type === 'connected') {
-            console.log('[SSE] Connected with userId:', data.userId);
+            window.__sseUserId = data.userId; // Store for debugging
           }
         } catch (error) {
           console.error('[SSE] Error parsing message:', error);
@@ -52,18 +48,17 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
       };
 
       // Handle errors
-      eventSource.onerror = error => {
-        console.error('[SSE] Connection error:', error);
-        isConnectedRef.current = false;
+      eventSource.onerror = () => {
+        console.error('[SSE] Connection error, reconnecting...');
+        setIsConnected(false);
 
         // Close and attempt reconnect
         eventSource.close();
         eventSourceRef.current = null;
-        setEventSource(null); // Clear state
+        setEventSource(null);
 
         // Reconnect after 3 seconds
         if (enabled) {
-          console.log('[SSE] Reconnecting in 3 seconds...');
           reconnectTimeoutRef.current = setTimeout(() => {
             connect();
           }, 3000);
@@ -75,7 +70,6 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
         eventSource.addEventListener(eventType, event => {
           try {
             const data = JSON.parse(event.data);
-            console.log(`[SSE] Event "${eventType}":`, data);
             // Always use ref to get latest handler (supports hot updates without reconnect)
             if (eventHandlersRef.current[eventType]) {
               eventHandlersRef.current[eventType](data);
@@ -91,8 +85,6 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
   }, [url, enabled]);
 
   const disconnect = useCallback(() => {
-    console.log('[SSE] Disconnecting...');
-
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
     }
@@ -100,14 +92,13 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
     if (eventSourceRef.current) {
       eventSourceRef.current.close();
       eventSourceRef.current = null;
-      setEventSource(null); // Clear state
+      setEventSource(null);
     }
 
-    isConnectedRef.current = false;
+    setIsConnected(false);
   }, []);
 
   const reconnect = useCallback(() => {
-    console.log('[SSE] Manual reconnect requested');
     disconnect();
     setTimeout(() => {
       connect();
@@ -127,7 +118,7 @@ export const useSSE = (url, eventHandlers = {}, enabled = true) => {
   }, [enabled, connect, disconnect]);
 
   return {
-    isConnected: isConnectedRef.current,
+    isConnected, // Return from state (reactive)
     eventSource, // Return from state instead of ref
     reconnect,
     disconnect,

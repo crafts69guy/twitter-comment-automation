@@ -21,11 +21,56 @@ class AutomationController {
     console.log(`[AutomationController] Starting automation for user ${this.userId}`);
 
     try {
-      // Step 1: Fetch from Google Sheets if no links exist
-      if (this.session.allLinks.length === 0) {
-        console.log('[AutomationController] Fetching from Google Sheets...');
-        await this.syncGoogleSheets();
+      // VALIDATION STEP 1: Check if browser is open
+      const browserStatus = await this.playwright.getBrowserStatus();
+
+      if (!browserStatus.isOpen) {
+        const errorMsg = 'Browser is not open. Please open the browser first.';
+        console.error(`[AutomationController] ${errorMsg}`);
+        this.emitSSE(this.userId, 'error', {
+          message: 'Browser Not Open',
+          details: errorMsg,
+        });
+        throw new Error(errorMsg);
       }
+
+      console.log('[AutomationController] ✓ Browser is open');
+
+      // VALIDATION STEP 2: Check if logged in to Twitter
+      if (!browserStatus.isLoggedIn) {
+        const errorMsg =
+          'Not logged in to Twitter. Please login manually in the browser before starting automation.';
+        console.error(`[AutomationController] ${errorMsg}`);
+        this.emitSSE(this.userId, 'error', {
+          message: 'Twitter Login Required',
+          details: errorMsg,
+        });
+        throw new Error(errorMsg);
+      }
+
+      console.log('[AutomationController] ✓ Logged in to Twitter');
+
+      // VALIDATION STEP 3: Check if links exist
+      if (this.session.allLinks.length === 0) {
+        console.log('[AutomationController] No links found, fetching from Google Sheets...');
+        await this.syncGoogleSheets();
+
+        // Double-check after sync
+        if (this.session.allLinks.length === 0) {
+          const errorMsg =
+            'No links found in Google Sheets. Please add Twitter URLs to your sheet and sync again.';
+          console.error(`[AutomationController] ${errorMsg}`);
+          this.emitSSE(this.userId, 'error', {
+            message: 'No Links Found',
+            details: errorMsg,
+          });
+          throw new Error(errorMsg);
+        }
+      }
+
+      console.log(
+        `[AutomationController] ✓ Found ${this.session.allLinks.length} links to process`,
+      );
 
       // Step 2: Divide into batches (without content/comments)
       this.createBatches();
@@ -770,9 +815,11 @@ class AutomationController {
     }
 
     // Determine retry delay based on failure rate
-    const failureThreshold = (settings.retryFailureThreshold || 30) / 100;
+    const failureThreshold = (this.session.settings.retryFailureThreshold || 30) / 100;
     const retryDelayMinutes =
-      failureRate < failureThreshold ? settings.retryDelayLow || 5 : settings.retryDelayHigh || 10;
+      failureRate < failureThreshold
+        ? this.session.settings.retryDelayLow || 5
+        : this.session.settings.retryDelayHigh || 10;
 
     console.log(
       `[AutomationController] Scheduling retry for batch ${batch.batchNumber}: ${retryableFailures.length} links, delay ${retryDelayMinutes}min, failure rate ${(failureRate * 100).toFixed(1)}%`,
