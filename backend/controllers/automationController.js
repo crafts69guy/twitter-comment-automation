@@ -293,17 +293,18 @@ class AutomationController {
     // ✅ HANDLE EXPIRED CREDENTIALS
     if (hasExpiredCreds) {
       console.error('❌ Twitter API credentials expired');
-      
+
       // Emit warning to user
       this.emitSSE(this.userId, 'error', {
         message: 'Twitter API credentials expired',
-        details: 'Please update Bearer Token and Cookies in Settings tab. You can extract them from Twitter DevTools (Network tab → Request Headers).',
+        details:
+          'Please update Bearer Token and Cookies in Settings tab. You can extract them from Twitter DevTools (Network tab → Request Headers).',
       });
 
       // Stop automation if credentials expired
       this.session.automation.isActive = false;
       this.session.automation.isPaused = false;
-      
+
       throw new Error(
         'Twitter API credentials expired. Please update Bearer Token and Cookies in Settings.',
       );
@@ -1271,6 +1272,52 @@ class AutomationController {
     console.log('[AutomationController] Resuming automation...');
     this.session.automation.isPaused = false;
     this.playwright.setPause(false);
+
+    // Restart countdown if there's a scheduled next batch time
+    if (this.session.automation.nextBatchTime) {
+      const nextRunTime = new Date(this.session.automation.nextBatchTime);
+      const remainingMs = nextRunTime - Date.now();
+
+      // Only restart countdown if there's still time remaining
+      if (remainingMs > 0) {
+        console.log('[AutomationController] Restarting countdown after resume...');
+
+        // Clear any existing countdown interval first
+        if (this.countdownInterval) {
+          clearInterval(this.countdownInterval);
+        }
+
+        // Restart countdown timer
+        this.countdownInterval = setInterval(() => {
+          // Check if automation is still active during countdown
+          if (!this.session.automation.isActive || this.session.automation.isPaused) {
+            console.log('[AutomationController] Automation paused/stopped during countdown');
+            clearInterval(this.countdownInterval);
+            this.countdownInterval = null;
+            return;
+          }
+
+          const remaining = nextRunTime - Date.now();
+
+          if (remaining <= 0) {
+            clearInterval(this.countdownInterval);
+            this.countdownInterval = null;
+            this.processNextBatch();
+          } else {
+            this.emitSSE(this.userId, 'countdown:update', {
+              remainingMs: remaining,
+              nextBatchTime: nextRunTime,
+            });
+          }
+        }, 1000);
+
+        // Emit initial countdown update
+        this.emitSSE(this.userId, 'countdown:update', {
+          remainingMs: remainingMs,
+          nextBatchTime: nextRunTime,
+        });
+      }
+    }
 
     this.emitSSE(this.userId, 'automation:resumed', {
       currentBatch: this.session.currentBatch,
