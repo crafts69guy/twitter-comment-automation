@@ -22,7 +22,13 @@ import {
 } from '@chakra-ui/react';
 import { CheckCircleIcon, WarningIcon } from '@chakra-ui/icons';
 
-function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = false }) {
+function SettingsTab({
+  settings,
+  onUpdateSettings,
+  onSyncSheets,
+  isSynced = false,
+  automationStatus,
+}) {
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
@@ -124,10 +130,27 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
             size="sm"
             colorScheme="green"
             onClick={onSyncSheets}
-            isDisabled={!localSettings.googleSheetUrl}
+            isDisabled={
+              !localSettings.googleSheetUrl ||
+              (automationStatus?.isActive &&
+                !automationStatus?.isPaused &&
+                automationStatus?.currentBatch)
+            }
           >
             Sync Links Now
           </Button>
+          {automationStatus?.isActive &&
+            !automationStatus?.isPaused &&
+            automationStatus?.currentBatch && (
+              <Text fontSize="xs" color="orange.600" mt={2}>
+                ⚠️ Sync is disabled while batch is processing. Pause or stop automation to sync.
+              </Text>
+            )}
+          {automationStatus?.isPaused && (
+            <Text fontSize="xs" color="blue.600" mt={2}>
+              ✅ Automation is paused. You can sync now to add new links to the queue.
+            </Text>
+          )}
         </Box>
 
         <Divider />

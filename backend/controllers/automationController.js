@@ -56,6 +56,21 @@ class AutomationController {
    * Sync Google Sheets to fetch new links
    */
   async syncGoogleSheets() {
+    // LAYER 1: Backend Protection - Prevent sync during active batch processing
+    // Allow sync when:
+    // 1. Automation is completely stopped (isActive=false)
+    // 2. Automation is paused (isActive=true && isPaused=true) AND no batch is currently being processed
+    const isProcessing =
+      this.session.automation.isActive &&
+      !this.session.automation.isPaused &&
+      this.session.currentBatch;
+
+    if (isProcessing) {
+      throw new Error(
+        'Cannot sync sheets while batch is processing. Please pause or stop automation first.',
+      );
+    }
+
     const { googleSheetUrl } = this.session.settings;
 
     if (!googleSheetUrl) {
@@ -1332,13 +1347,15 @@ class AutomationController {
     this.session.automation.retryPending = false;
     this.session.automation.retryBatchNumber = null;
 
-    // If there's a current batch, mark it as stopped
+    // If there's a current batch, mark it as stopped and clear the reference
     if (this.session.currentBatch) {
       const currentBatch = this.getCurrentBatch();
       if (currentBatch) {
         currentBatch.status = 'stopped';
         currentBatch.endTime = new Date();
       }
+      // Clear current batch reference so sync can work immediately after stop
+      this.session.currentBatch = null;
     }
 
     this.emitSSE(this.userId, 'automation:stopped', {});

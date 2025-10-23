@@ -1120,6 +1120,7 @@ function App() {
                   onUpdateSettings={updateSettings}
                   onSyncSheets={syncGoogleSheets}
                   isSynced={isSynced}
+                  automationStatus={automationStatus}
                 />
               </TabPanel>
 
