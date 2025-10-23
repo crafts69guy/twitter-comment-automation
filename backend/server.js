@@ -85,7 +85,10 @@ const initializeSession = (userId) => {
         twitterPassword: "",
         twitterVerificationHandle: "",
         twitterCookies: "",
-        twitterBearerToken: ""
+        twitterBearerToken: "",
+        retryFailureThreshold: 30,
+        retryDelayLow: 5,
+        retryDelayHigh: 10
       },
 
       // Browser Management

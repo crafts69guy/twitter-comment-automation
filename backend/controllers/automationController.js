@@ -759,7 +759,9 @@ class AutomationController {
     }
 
     // Determine retry delay based on failure rate
-    const retryDelayMinutes = failureRate < 0.3 ? 5 : 10;
+    const failureThreshold = (settings.retryFailureThreshold || 30) / 100;
+    const retryDelayMinutes =
+      failureRate < failureThreshold ? settings.retryDelayLow || 5 : settings.retryDelayHigh || 10;
 
     console.log(
       `[AutomationController] Scheduling retry for batch ${batch.batchNumber}: ${retryableFailures.length} links, delay ${retryDelayMinutes}min, failure rate ${(failureRate * 100).toFixed(1)}%`,
@@ -1053,9 +1055,7 @@ class AutomationController {
     console.log(`[AutomationController] Force retry requested for batch ${batchNumber}`);
 
     // Find the batch with retry scheduled (search in all batches)
-    const batch = this.session.batches.find(
-      b => b.batchNumber === batchNumber && b.retryScheduled,
-    );
+    const batch = this.session.batches.find(b => b.batchNumber === batchNumber && b.retryScheduled);
 
     if (!batch) {
       throw new Error(`Batch ${batchNumber} not found or no retry scheduled`);
@@ -1117,9 +1117,7 @@ class AutomationController {
     console.log(`[AutomationController] Cancel retry requested for batch ${batchNumber}`);
 
     // Find the batch with retry scheduled (search in all batches)
-    const batch = this.session.batches.find(
-      b => b.batchNumber === batchNumber && b.retryScheduled,
-    );
+    const batch = this.session.batches.find(b => b.batchNumber === batchNumber && b.retryScheduled);
 
     if (!batch) {
       throw new Error(`Batch ${batchNumber} not found or no retry scheduled`);

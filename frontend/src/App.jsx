@@ -64,6 +64,9 @@ function App() {
       twitterVerificationHandle: '',
       twitterCookies: '',
       twitterBearerToken: '',
+      retryFailureThreshold: 30,
+      retryDelayLow: 5,
+      retryDelayHigh: 10,
     };
   };
 

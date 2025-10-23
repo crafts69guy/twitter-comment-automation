@@ -219,6 +219,9 @@ router.post('/update-settings', (req, res) => {
       twitterUsername,
       twitterPassword,
       twitterVerificationHandle,
+      retryFailureThreshold,
+      retryDelayLow,
+      retryDelayHigh,
     } = req.body;
 
     if (batchSize !== undefined) {
@@ -242,6 +245,12 @@ router.post('/update-settings', (req, res) => {
     if (twitterPassword !== undefined) req.userSession.settings.twitterPassword = twitterPassword;
     if (twitterVerificationHandle !== undefined)
       req.userSession.settings.twitterVerificationHandle = twitterVerificationHandle;
+    if (retryFailureThreshold !== undefined)
+      req.userSession.settings.retryFailureThreshold = parseInt(retryFailureThreshold);
+    if (retryDelayLow !== undefined)
+      req.userSession.settings.retryDelayLow = parseInt(retryDelayLow);
+    if (retryDelayHigh !== undefined)
+      req.userSession.settings.retryDelayHigh = parseInt(retryDelayHigh);
 
     res.json({
       success: true,

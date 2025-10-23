@@ -138,6 +138,70 @@ function SettingsTab({ settings, onUpdateSettings, onSyncSheets, isSynced = fals
             Batch Processing
           </Heading>
 
+          <VStack spacing={4} align="stretch" mb={4}>
+            <FormControl>
+              <FormLabel>Retry Failure Rate Threshold (%)</FormLabel>
+              <NumberInput
+                value={localSettings.retryFailureThreshold || 30}
+                onChange={value => handleChange('retryFailureThreshold', parseInt(value))}
+                min={0}
+                max={100}
+                step={5}
+              >
+                <NumberInputField />
+                <NumberInputStepper>
+                  <NumberIncrementStepper />
+                  <NumberDecrementStepper />
+                </NumberInputStepper>
+              </NumberInput>
+              <Text fontSize="sm" color="gray.500" mt={1}>
+                If failure rate is below this threshold, retry delay is shorter (default: 30%)
+              </Text>
+            </FormControl>
+
+            <HStack spacing={4} align="flex-start">
+              <FormControl>
+                <FormLabel>Low Failure Retry Delay (minutes)</FormLabel>
+                <NumberInput
+                  value={localSettings.retryDelayLow || 5}
+                  onChange={value => handleChange('retryDelayLow', parseInt(value))}
+                  min={1}
+                  max={60}
+                  step={1}
+                >
+                  <NumberInputField />
+                  <NumberInputStepper>
+                    <NumberIncrementStepper />
+                    <NumberDecrementStepper />
+                  </NumberInputStepper>
+                </NumberInput>
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  When failure rate {'<'} threshold
+                </Text>
+              </FormControl>
+
+              <FormControl>
+                <FormLabel>High Failure Retry Delay (minutes)</FormLabel>
+                <NumberInput
+                  value={localSettings.retryDelayHigh || 10}
+                  onChange={value => handleChange('retryDelayHigh', parseInt(value))}
+                  min={1}
+                  max={60}
+                  step={1}
+                >
+                  <NumberInputField />
+                  <NumberInputStepper>
+                    <NumberIncrementStepper />
+                    <NumberDecrementStepper />
+                  </NumberInputStepper>
+                </NumberInput>
+                <Text fontSize="xs" color="gray.500" mt={1}>
+                  When failure rate ≥ threshold
+                </Text>
+              </FormControl>
+            </HStack>
+          </VStack>
+
           <VStack spacing={4} align="stretch">
             <FormControl>
               <FormLabel>Batch Size (links per batch)</FormLabel>
