@@ -9,9 +9,6 @@ class PlaywrightService {
     this.isProcessing = false;
     this.shouldPause = false;
     this.shouldStop = false;
-    this.extractedCredentials = null; // Store extracted credentials temporarily
-    this.cachedCredentials = null; // Cache credentials to avoid re-extraction
-    this.lastExtractionTime = null; // Track when credentials were last extracted
   }
 
   async getBrowserStatus() {
@@ -61,14 +58,14 @@ class PlaywrightService {
     }
   }
 
-  async ensureBrowserOpen(credentials = null) {
+  async ensureBrowserOpen() {
     if (!this.browser || !this.browser.isConnected()) {
-      await this.initialize(credentials);
+      await this.initialize();
     }
     return this.currentPage;
   }
 
-  async initialize(credentials = null) {
+  async initialize() {
     if (this.browser && this.browser.isConnected()) {
       console.log('Browser already open');
       return;
@@ -120,22 +117,7 @@ class PlaywrightService {
 
     this.currentPage = await this.context.newPage();
 
-    console.log('Browser initialized with Playwright', JSON.stringify(credentials));
-
-    // Auto-login if credentials provided
-    if (credentials && credentials.username && credentials.password) {
-      console.log('Credentials provided, attempting auto-login...');
-      const extractedCredentials = await this.loginToTwitter(
-        credentials.username,
-        credentials.password,
-        credentials.verificationHandle,
-      );
-
-      // Store extracted credentials temporarily so they can be retrieved
-      if (extractedCredentials) {
-        this.extractedCredentials = extractedCredentials;
-      }
-    }
+    console.log('✅ Browser initialized with Playwright (Manual login mode)');
   }
 
   /**
@@ -395,116 +377,6 @@ class PlaywrightService {
   }
 
   /**
-   * Auto-login to Twitter/X with username and password
-   * Returns extracted Bearer Token and Cookies after successful login
-   */
-  async loginToTwitter(username, password, verificationHandle = null) {
-    try {
-      console.log('Navigating to Twitter login page...');
-      await this.currentPage.goto('https://twitter.com/i/flow/login', {
-        waitUntil: 'domcontentloaded',
-        timeout: 360000,
-      });
-
-      // Wait for page to load and settle
-      await this.currentPage.waitForTimeout(3000);
-
-      // Step 1: Enter username/email
-      console.log('Entering username...');
-      const usernameInput = this.currentPage.locator('input[autocomplete="username"]');
-      await usernameInput.waitFor({ timeout: 50000 });
-
-      // Move mouse to input field and click (human-like)
-      await this.moveMouseToElement(usernameInput);
-      await usernameInput.click();
-      await this.randomDelay(300, 700);
-
-      // Type username with random delays like a human
-      await this.typeHumanLike(usernameInput, username);
-      await this.randomDelay(500, 1500);
-
-      // Click "Next" button
-      const nextButton = this.currentPage.locator('button:has-text("Next")').first();
-      await this.moveMouseToElement(nextButton);
-      await this.randomDelay(200, 500);
-      await nextButton.click();
-      console.log('Clicked Next button');
-
-      await this.currentPage.waitForTimeout(3000);
-
-      // Check for unusual activity challenge (phone/username verification)
-      const unusualActivityInput = this.currentPage.locator('input[name="text"]');
-      const hasUnusualActivity = (await unusualActivityInput.count()) > 0;
-
-      if (hasUnusualActivity) {
-        if (!verificationHandle || verificationHandle.trim() === '') {
-          throw new Error(
-            '❌ Twitter detected unusual activity and requires verification. ' +
-              'Please configure "Phone Number or Username (for verification)" in Settings.',
-          );
-        }
-        console.log('⚠️  Detected unusual activity challenge - entering verification handle...');
-        await this.moveMouseToElement(unusualActivityInput);
-        await unusualActivityInput.click();
-        await this.randomDelay(300, 700);
-        await this.typeHumanLike(unusualActivityInput, verificationHandle);
-        await this.randomDelay(800, 1500);
-
-        // Click Next button after entering verification username
-        const verifyNextButton = this.currentPage.locator('button:has-text("Next")').first();
-        await this.moveMouseToElement(verifyNextButton);
-        await this.randomDelay(200, 500);
-        await verifyNextButton.click();
-        console.log('Clicked Next button after verification');
-
-        await this.randomDelay(2000, 4000);
-      }
-
-      // Step 2: Enter password
-      console.log('Entering password...');
-      const passwordInput = this.currentPage.locator('input[name="password"]');
-      await passwordInput.waitFor({ timeout: 30000 });
-
-      // Move mouse and click password field to focus
-      await this.moveMouseToElement(passwordInput);
-      await passwordInput.click();
-      await this.randomDelay(300, 700);
-
-      // Type password with human-like behavior
-      await this.typeHumanLike(passwordInput, password);
-      await this.randomDelay(500, 1200);
-
-      // Click "Log in" button
-      const loginButton = this.currentPage.locator('button[data-testid="LoginForm_Login_Button"]');
-      await this.moveMouseToElement(loginButton);
-      await this.randomDelay(300, 600);
-      await loginButton.click();
-      console.log('Clicked Login button');
-
-      // Wait for navigation to home page
-      await this.currentPage.waitForURL('**/home', { timeout: 15000 });
-      console.log('✅ Successfully logged in to Twitter');
-
-      await this.currentPage.waitForTimeout(3000);
-
-      // Extract Bearer Token and Cookies after successful login
-      console.log('📦 Extracting Bearer Token and Cookies...');
-      const credentials = await this.extractCredentialsFromBrowser();
-
-      if (credentials.bearerToken && credentials.cookies) {
-        console.log('✅ Successfully extracted credentials from browser');
-        return credentials;
-      } else {
-        console.warn('⚠️  Could not extract all credentials, will use existing ones');
-        return null;
-      }
-    } catch (error) {
-      console.error('❌ Error during Twitter login:', error.message);
-      throw new Error(`Twitter login failed: ${error.message}`);
-    }
-  }
-
-  /**
    * Check if Twitter session is still valid
    * Returns { valid: boolean, reason: string }
    */
@@ -534,148 +406,6 @@ class PlaywrightService {
     }
   }
 
-  /**
-   * Extract Bearer Token and Cookies from browser after login
-   */
-  async extractCredentialsFromBrowser(forceRefresh = false) {
-    try {
-      // Check cache (valid for 1 hour)
-      const cacheValidityMs = 60 * 60 * 1000; // 1 hour
-      const isCacheValid =
-        this.cachedCredentials &&
-        this.lastExtractionTime &&
-        Date.now() - this.lastExtractionTime < cacheValidityMs;
-
-      if (!forceRefresh && isCacheValid) {
-        console.log('✅ Using cached credentials (extracted less than 1 hour ago)');
-        return this.cachedCredentials;
-      }
-
-      console.log('🔄 Extracting fresh credentials from browser...');
-
-      // Get cookies from browser context
-      const cookies = await this.context.cookies();
-
-      // Extract important cookies
-      const cookieObj = {};
-      cookies.forEach(cookie => {
-        if (['auth_token', 'ct0', 'twid', 'guest_id'].includes(cookie.name)) {
-          cookieObj[cookie.name] = cookie.value;
-        }
-      });
-
-      console.log('🍪 Extracted cookies:', Object.keys(cookieObj));
-
-      // Extract Bearer Token from network requests
-      let bearerToken = null;
-      let requestListener = null;
-
-      // Listen to network requests to capture Authorization header
-      const bearerTokenPromise = new Promise(resolve => {
-        const timeout = setTimeout(() => {
-          if (requestListener) {
-            this.currentPage.off('request', requestListener);
-          }
-          resolve(null);
-        }, 10000); // Increase timeout to 10s
-
-        requestListener = request => {
-          const headers = request.headers();
-          if (headers['authorization'] && headers['authorization'].startsWith('Bearer ')) {
-            clearTimeout(timeout);
-            this.currentPage.off('request', requestListener);
-            console.log('✅ Bearer Token captured from network request');
-            resolve(headers['authorization']);
-          }
-        };
-
-        this.currentPage.on('request', requestListener);
-      });
-
-      // Navigate to trigger API calls
-      console.log('🔄 Navigating to Twitter home to capture Bearer Token...');
-      await this.currentPage.goto('https://twitter.com/home', {
-        waitUntil: 'domcontentloaded',
-        timeout: 30000,
-      });
-
-      // Wait a bit for page to load and make API calls
-      await this.currentPage.waitForTimeout(2000);
-
-      // Scroll to trigger more API calls
-      await this.currentPage.evaluate(() => {
-        window.scrollBy(0, 500);
-      });
-
-      await this.currentPage.waitForTimeout(1000);
-
-      bearerToken = await bearerTokenPromise;
-
-      if (!bearerToken) {
-        console.log('⚠️  Bearer Token not found in network requests, trying fallback methods...');
-
-        // Fallback 1: Extract from page source (main.js files)
-        bearerToken = await this.currentPage.evaluate(() => {
-          try {
-            // Look for Bearer token in script tags
-            const scripts = Array.from(document.querySelectorAll('script'));
-            for (const script of scripts) {
-              const content = script.textContent || '';
-              const match = content.match(/Bearer [A-Za-z0-9\-._~+/]+=*/);
-              if (match) {
-                return match[0];
-              }
-            }
-
-            // Check localStorage
-            const localStorageToken = localStorage.getItem('twitter_bearer_token');
-            if (localStorageToken) return localStorageToken;
-
-            // Check window object
-            if (window.__INITIAL_STATE__?.token) return window.__INITIAL_STATE__.token;
-
-            return null;
-          } catch (e) {
-            return null;
-          }
-        });
-
-        if (bearerToken) {
-          console.log('✅ Bearer Token found via fallback method');
-        }
-      }
-
-      if (!bearerToken) {
-        console.warn(
-          '⚠️  Could not extract Bearer Token. Twitter API calls may fail. Please check browser session.',
-        );
-      }
-
-      console.log('🔑 Bearer Token found:', bearerToken ? 'Yes' : 'No');
-      if (bearerToken) {
-        console.log('📏 Bearer Token length:', bearerToken.length);
-      }
-
-      const credentials = {
-        bearerToken: bearerToken || '',
-        cookies: JSON.stringify(cookieObj),
-      };
-
-      // Cache credentials
-      this.cachedCredentials = credentials;
-      this.lastExtractionTime = Date.now();
-      console.log('💾 Credentials cached for 1 hour');
-
-      return credentials;
-    } catch (error) {
-      console.error('❌ Error extracting credentials:', error.message);
-      return {
-        bearerToken: '',
-        cookies: '',
-      };
-    }
-  }
-
   getChromePaths(platform) {
     const paths = {
       darwin: [
@@ -700,29 +430,13 @@ class PlaywrightService {
   /**
    * Process batch sequentially with single tab
    * @param {Array} links - Array of link objects { id, url, comment, content }
-   * @param {Object} credentials - Twitter credentials { username, password }
    * @param {Function} onProgress - Callback for progress updates
    * @param {Function} onLinkComplete - Callback when each link completes
-   * @param {Function} onCredentialsExtracted - Callback when credentials are extracted from browser
    * @param {Function} onStatusUpdate - Callback for detailed status updates (optional)
    * @returns {Object} - { completed: bool, stopped: bool, results: array, processedCount: number }
    */
-  async processBatchSequential(
-    links,
-    credentials,
-    onProgress,
-    onLinkComplete,
-    onCredentialsExtracted,
-    onStatusUpdate = null,
-  ) {
-    const page = await this.ensureBrowserOpen(credentials);
-
-    // Check if credentials were extracted during login
-    if (this.extractedCredentials && onCredentialsExtracted) {
-      console.log('📤 Sending extracted credentials to controller...');
-      onCredentialsExtracted(this.extractedCredentials);
-      this.extractedCredentials = null; // Clear after sending
-    }
+  async processBatchSequential(links, onProgress, onLinkComplete, onStatusUpdate = null) {
+    const page = await this.ensureBrowserOpen();
 
     const results = [];
     this.isProcessing = true;
@@ -751,40 +465,16 @@ class PlaywrightService {
       const sessionCheck = await this.checkSessionHealth(page);
       if (!sessionCheck.valid) {
         console.error(`❌ Session expired: ${sessionCheck.reason}`);
-        console.log('🔄 Attempting to re-login...');
-
-        try {
-          // RE-LOGIN
-          const newCredentials = await this.loginToTwitter(
-            credentials.username,
-            credentials.password,
-            credentials.verificationHandle,
-          );
-
-          // Send new credentials to controller
-          if (newCredentials && onCredentialsExtracted) {
-            console.log('📤 Sending refreshed credentials to controller...');
-            onCredentialsExtracted(newCredentials);
-          }
-
-          // VERIFY LOGIN SUCCESS
-          const recheckSession = await this.checkSessionHealth(page);
-          if (!recheckSession.valid) {
-            throw new Error('Re-login failed - session still invalid');
-          }
-
-          console.log('✅ Re-login successful, continuing batch processing...');
-        } catch (reloginError) {
-          console.error('❌ Re-login failed:', reloginError.message);
-          // Stop batch processing if re-login fails
-          this.isProcessing = false;
-          return {
-            stopped: true,
-            results,
-            processedCount: i,
-            error: 'Session expired and re-login failed',
-          };
-        }
+        console.error('⚠️ Please login manually in the browser to continue');
+        
+        // Stop batch processing if session expired
+        this.isProcessing = false;
+        return {
+          stopped: true,
+          results,
+          processedCount: i,
+          error: 'Session expired. Please login manually in the browser and restart automation.',
+        };
       }
 
       // Progress callback

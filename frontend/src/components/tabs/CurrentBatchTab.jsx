@@ -123,6 +123,30 @@ function CurrentBatchTab({
               {browserStatus.isOpen ? 'Close Browser' : 'Open Browser'}
             </Button>
           </HStack>
+
+          {/* Manual Login Instructions */}
+          {browserStatus.isOpen && !browserStatus.isLoggedIn && (
+            <Box bg="blue.50" border="1px solid" borderColor="blue.200" borderRadius="md" p={3}>
+              <Text fontSize="sm" color="blue.800" fontWeight="medium">
+                🔐 Please login manually to Twitter
+              </Text>
+              <Text fontSize="sm" color="blue.700" mt={1}>
+                Browser is open. Navigate to Twitter.com and login with your account to start
+                automation.
+              </Text>
+            </Box>
+          )}
+
+          {browserStatus.isOpen && browserStatus.isLoggedIn && (
+            <Box bg="green.50" border="1px solid" borderColor="green.200" borderRadius="md" p={3}>
+              <Text fontSize="sm" color="green.800" fontWeight="medium">
+                ✅ Logged in and ready
+              </Text>
+              <Text fontSize="sm" color="green.700" mt={1}>
+                You can now start automation.
+              </Text>
+            </Box>
+          )}
         </CardBody>
       </Card>
 

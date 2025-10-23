@@ -1,14 +1,14 @@
-import express from "express";
-import session from "express-session";
-import cors from "cors";
-import { v4 as uuidv4 } from "uuid";
-import dotenv from "dotenv";
+import express from 'express';
+import session from 'express-session';
+import cors from 'cors';
+import { v4 as uuidv4 } from 'uuid';
+import dotenv from 'dotenv';
 
 // V2 Routes (only routes currently in use)
-import automationRouter from "./routes/automation.js";
-import batchesRouter from "./routes/batches.js";
-import failedLinksRouter from "./routes/failedLinks.js";
-import browserRouter from "./routes/browser.js";
+import automationRouter from './routes/automation.js';
+import batchesRouter from './routes/batches.js';
+import failedLinksRouter from './routes/failedLinks.js';
+import browserRouter from './routes/browser.js';
 
 dotenv.config();
 
@@ -17,18 +17,16 @@ const PORT = process.env.PORT || 3001;
 
 app.use(
   cors({
-    origin: "http://localhost:5173",
+    origin: 'http://localhost:5173',
     credentials: true,
-  })
+  }),
 );
 
 app.use(express.json());
 
 app.use(
   session({
-    secret:
-      process.env.SESSION_SECRET ||
-      "twitter-automation-secret-key-change-in-production",
+    secret: process.env.SESSION_SECRET || 'twitter-automation-secret-key-change-in-production',
     resave: false,
     saveUninitialized: true,
     cookie: {
@@ -36,7 +34,7 @@ app.use(
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000,
     },
-  })
+  }),
 );
 
 // Session storage with new V2 structure
@@ -46,7 +44,7 @@ const sessions = {};
 const sseClients = new Map();
 
 // Initialize or get session with V2 structure
-const initializeSession = (userId) => {
+const initializeSession = userId => {
   if (!sessions[userId]) {
     sessions[userId] = {
       // Source Data
@@ -71,38 +69,35 @@ const initializeSession = (userId) => {
         totalBatchesCompleted: 0,
         totalLinksProcessed: 0,
         totalSuccessful: 0,
-        totalFailed: 0
+        totalFailed: 0,
       },
 
       // Settings
       settings: {
-        googleSheetUrl: "",
-        aiProvider: "gemini",
+        googleSheetUrl: '',
+        aiProvider: 'gemini',
         batchSize: 15,
         batchIntervalMinutes: 20,
-        additionalPrompt: "",
-        twitterUsername: "",
-        twitterPassword: "",
-        twitterVerificationHandle: "",
-        twitterCookies: "",
-        twitterBearerToken: "",
+        additionalPrompt: '',
+        twitterCookies: '',
+        twitterBearerToken: '',
         retryFailureThreshold: 30,
         retryDelayLow: 5,
-        retryDelayHigh: 10
+        retryDelayHigh: 10,
       },
 
       // Browser Management
       browser: {
         isOpen: false,
         currentPageUrl: null,
-        lastActivityAt: null
-      }
+        lastActivityAt: null,
+      },
     };
   }
   return sessions[userId];
 };
 
-app.use((req, res, next) => {
+app.use((req, _res, next) => {
   if (!req.session.userId) {
     req.session.userId = uuidv4();
   }
@@ -113,23 +108,23 @@ app.use((req, res, next) => {
 });
 
 // SSE endpoint for real-time updates
-app.get("/api/events/stream", (req, res) => {
+app.get('/api/events/stream', (req, res) => {
   const userId = req.userId;
 
   // Set SSE headers
-  res.setHeader("Content-Type", "text/event-stream");
-  res.setHeader("Cache-Control", "no-cache");
-  res.setHeader("Connection", "keep-alive");
-  res.setHeader("X-Accel-Buffering", "no"); // Disable nginx buffering
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no'); // Disable nginx buffering
 
   // Send initial connection event
-  res.write(`data: ${JSON.stringify({ type: "connected", userId })}\n\n`);
+  res.write(`data: ${JSON.stringify({ type: 'connected', userId })}\n\n`);
 
   // Store client connection
   sseClients.set(userId, res);
 
   // Handle client disconnect
-  req.on("close", () => {
+  req.on('close', () => {
     sseClients.delete(userId);
   });
 });
@@ -144,17 +139,17 @@ export const emitSSE = (userId, eventType, data) => {
 };
 
 // Make sessions and SSE available to routes
-app.set("sessions", sessions);
-app.set("emitSSE", emitSSE);
+app.set('sessions', sessions);
+app.set('emitSSE', emitSSE);
 
 // V2 API Routes
-app.use("/api/v2/automation", automationRouter);
-app.use("/api/v2/batches", batchesRouter);
-app.use("/api/v2/failed-links", failedLinksRouter);
-app.use("/api/v2/browser", browserRouter);
+app.use('/api/v2/automation', automationRouter);
+app.use('/api/v2/batches', batchesRouter);
+app.use('/api/v2/failed-links', failedLinksRouter);
+app.use('/api/v2/browser', browserRouter);
 
-app.get("/api/health", (req, res) => {
-  res.json({ status: "OK", sessionId: req.session.userId });
+app.get('/api/health', (req, res) => {
+  res.json({ status: 'OK', sessionId: req.session.userId });
 });
 
 app.listen(PORT, () => {

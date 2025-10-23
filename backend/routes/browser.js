@@ -1,6 +1,5 @@
 import express from 'express';
 import playwrightService from '../services/playwrightService.js';
-import { emitSSE } from '../server.js';
 
 const router = express.Router();
 
@@ -33,28 +32,23 @@ router.get('/status', async (req, res) => {
 
 /**
  * POST /api/browser/open
- * Initialize browser with auto-login if credentials exist
+ * Initialize browser (manual login - no auto-login)
  */
 router.post('/open', async (req, res) => {
   try {
-    // Get Twitter credentials from session settings
-    const credentials = {
-      username: req.userSession.settings.twitterUsername,
-      password: req.userSession.settings.twitterPassword,
-      verificationHandle: req.userSession.settings.twitterVerificationHandle,
-    };
+    // Validate that bearer token and cookies are configured
+    const { twitterBearerToken, twitterCookies } = req.userSession.settings;
 
-    // Validate credentials
-    if (!credentials.username || !credentials.password || !credentials.verificationHandle) {
+    if (!twitterBearerToken || !twitterCookies) {
       return res.status(400).json({
         success: false,
         message:
-          'Twitter credentials are required. Please configure username, password, and verification handle in Settings.',
+          'Twitter Bearer Token and Cookies are required. Please configure them in Settings before opening browser.',
       });
     }
 
-    // Initialize browser with credentials for auto-login
-    await playwrightService.initialize(credentials);
+    // Initialize browser without credentials (no auto-login)
+    await playwrightService.initialize();
 
     const status = await playwrightService.getBrowserStatus();
 
@@ -62,39 +56,9 @@ router.post('/open', async (req, res) => {
     req.userSession.browser.isOpen = true;
     req.userSession.browser.lastActivityAt = new Date();
 
-    // Check if credentials were extracted after login
-    let extractedCredentials = null;
-    if (playwrightService.extractedCredentials) {
-      const extracted = playwrightService.extractedCredentials;
-
-      // Save extracted credentials to session
-      req.userSession.settings.twitterBearerToken = extracted.bearerToken;
-      req.userSession.settings.twitterCookies = extracted.cookies;
-
-      console.log('✅ Extracted credentials saved to session');
-
-      // Store for response
-      extractedCredentials = {
-        bearerToken: extracted.bearerToken || '',
-        cookies: extracted.cookies || '',
-      };
-
-      // Emit SSE event to frontend to update localStorage
-      emitSSE(req.userId, 'credentials:extracted', {
-        bearerToken: extracted.bearerToken || '',
-        cookies: extracted.cookies || '',
-        message: 'Bearer Token and Cookies extracted from browser successfully!',
-      });
-
-      // Clear from service
-      playwrightService.extractedCredentials = null;
-    }
-
     res.json({
       success: true,
-      message: 'Browser opened successfully',
-      autoLoginAttempted: !!(credentials.username && credentials.password),
-      extractedCredentials: extractedCredentials,
+      message: 'Browser opened successfully. Please login manually to Twitter.',
       ...status,
     });
   } catch (error) {

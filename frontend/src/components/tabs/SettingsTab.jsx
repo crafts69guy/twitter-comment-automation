@@ -74,9 +74,7 @@ function SettingsTab({
   // Check if required fields are filled
   const isRequiredFieldsFilled = () => {
     return (
-      localSettings.twitterUsername?.trim() !== '' &&
-      localSettings.twitterPassword?.trim() !== '' &&
-      localSettings.twitterVerificationHandle?.trim() !== ''
+      localSettings.twitterBearerToken?.trim() !== '' && localSettings.twitterCookies?.trim() !== ''
     );
   };
 
@@ -336,7 +334,7 @@ function SettingsTab({
         {/* Twitter Authentication Configuration */}
         <Box>
           <Heading size="sm" mb={2}>
-            Twitter Authentication
+            Twitter Authentication (Manual)
           </Heading>
           <Box
             bg="blue.50"
@@ -347,66 +345,62 @@ function SettingsTab({
             mb={4}
           >
             <Text fontSize="sm" color="blue.800" fontWeight="medium">
-              🔐 Auto-Login with Username & Password
+              🔑 Manual Token & Cookie Setup
             </Text>
             <Text fontSize="sm" color="blue.700" mt={1}>
-              Browser will automatically login before starting automation. Bearer token and cookies
-              are still needed for content fetching.
+              Open browser, login manually to Twitter, then paste Bearer Token and Cookies from
+              DevTools (Network tab → Request Headers).
             </Text>
           </Box>
 
           <VStack spacing={4} align="stretch">
             <FormControl isRequired>
-              <FormLabel>Twitter Username</FormLabel>
-              <Input
-                value={localSettings.twitterUsername}
-                onChange={e => handleChange('twitterUsername', e.target.value)}
-                placeholder="@username or email"
+              <FormLabel>Twitter Bearer Token</FormLabel>
+              <Textarea
+                value={localSettings.twitterBearerToken}
+                onChange={e => handleChange('twitterBearerToken', e.target.value)}
+                placeholder="Bearer AAAAAAAAAAAAAAAAAAAAANRILgAAAAAAnNwIzUejRCOuH5E6I8xnZz4puTs%3D1Zv7ttfk..."
+                rows={3}
               />
               <Text fontSize="xs" color="gray.600" mt={1}>
-                Your Twitter/X username or email
+                Find in DevTools → Network tab → any twitter.com request → Request Headers →
+                Authorization
               </Text>
             </FormControl>
 
             <FormControl isRequired>
-              <FormLabel>Twitter Password</FormLabel>
-              <Input
-                type="password"
-                value={localSettings.twitterPassword}
-                onChange={e => handleChange('twitterPassword', e.target.value)}
-                placeholder="Enter your Twitter password"
+              <FormLabel>Twitter Cookies</FormLabel>
+              <Textarea
+                value={localSettings.twitterCookies}
+                onChange={e => handleChange('twitterCookies', e.target.value)}
+                placeholder='{"auth_token":"...","ct0":"...","twid":"...","guest_id":"..."}'
+                rows={4}
               />
               <Text fontSize="xs" color="gray.600" mt={1}>
-                Password is stored locally in browser cache only
-              </Text>
-            </FormControl>
-
-            <FormControl isRequired>
-              <FormLabel>Phone Number or Username (for verification)</FormLabel>
-              <Input
-                value={localSettings.twitterVerificationHandle}
-                onChange={e => handleChange('twitterVerificationHandle', e.target.value)}
-                placeholder="@insideee_dev013 or +1234567890"
-              />
-              <Text fontSize="xs" color="gray.600" mt={1}>
-                Used when Twitter detects unusual activity and asks for additional verification
+                Copy as JSON object with auth_token, ct0, twid, and guest_id
               </Text>
             </FormControl>
 
             <Box
-              bg="green.50"
+              bg="yellow.50"
               border="1px solid"
-              borderColor="green.200"
+              borderColor="yellow.200"
               borderRadius="md"
               p={3}
               mt={2}
             >
-              <Text fontSize="sm" color="green.800" fontWeight="medium">
-                ✨ Bearer Token & Cookies are auto-extracted after login
+              <Text fontSize="sm" color="yellow.800" fontWeight="medium">
+                💡 How to get Bearer Token & Cookies:
               </Text>
-              <Text fontSize="sm" color="green.700" mt={1}>
-                When you start automation, the browser will login and automatically extract all
-                required credentials. No manual setup needed!
+              <Text fontSize="xs" color="yellow.700" mt={1} as="ol" pl={4}>
+                <li>Open browser and login to Twitter manually</li>
+                <li>Open DevTools (F12) → Network tab</li>
+                <li>Refresh page or click any tweet</li>
+                <li>
+                  Find any request to <code>api.twitter.com</code>
+                </li>
+                <li>Copy Authorization header (Bearer token)</li>
+                <li>Copy Cookie header values (auth_token, ct0, twid, guest_id)</li>
               </Text>
             </Box>
           </VStack>
@@ -421,8 +415,7 @@ function SettingsTab({
               ⚠️ Required fields missing
             </Text>
             <Text fontSize="sm" color="orange.700" mt={1}>
-              Please fill in Twitter Username, Password, and Phone Number/Username (for
-              verification) to save settings.
+              Please fill in Twitter Bearer Token and Cookies to save settings.
             </Text>
           </Box>
         )}

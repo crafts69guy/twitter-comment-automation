@@ -292,62 +292,21 @@ class AutomationController {
 
     // ✅ HANDLE EXPIRED CREDENTIALS
     if (hasExpiredCreds) {
-      console.error('🔄 Twitter API credentials expired - attempting to refresh from browser...');
+      console.error('❌ Twitter API credentials expired');
+      
+      // Emit warning to user
+      this.emitSSE(this.userId, 'error', {
+        message: 'Twitter API credentials expired',
+        details: 'Please update Bearer Token and Cookies in Settings tab. You can extract them from Twitter DevTools (Network tab → Request Headers).',
+      });
 
-      try {
-        // Try to extract fresh credentials from browser
-        const freshCredentials = await this.playwright.extractCredentialsFromBrowser();
-
-        if (freshCredentials.bearerToken && freshCredentials.cookies) {
-          console.log('✅ Successfully refreshed credentials from browser');
-
-          // Update session settings
-          this.session.settings.twitterBearerToken = freshCredentials.bearerToken;
-          this.session.settings.twitterCookies = freshCredentials.cookies;
-
-          // Emit success notification
-          this.emitSSE(this.userId, 'credentials:refreshed', {
-            message: 'Twitter API credentials refreshed successfully',
-          });
-
-          // RETRY FETCHING CONTENT with new credentials
-          console.log('🔄 Retrying to fetch tweet content with refreshed credentials...');
-          const retryResults = await fetchTweetContentBatch(
-            linksWithoutContent,
-            freshCredentials.cookies,
-            freshCredentials.bearerToken,
-          );
-
-          // Update links with retry results
-          retryResults.forEach(result => {
-            const link = batchLinks.find(l => l.id === result.linkId);
-            if (link && result.success) {
-              link.content = result.content;
-              link.author = result.author;
-              link.authorName = result.authorName;
-              link.contentError = null; // Clear previous error
-              successCount++;
-              failedCount--;
-            }
-          });
-
-          console.log(
-            `[AutomationController] Retry completed: ${successCount} success, ${failedCount} failed`,
-          );
-        } else {
-          console.warn('⚠️ Could not extract fresh credentials from browser');
-          this.emitSSE(this.userId, 'warning', {
-            message: 'Twitter API credentials expired',
-            details: 'Please re-login to Twitter in the automation browser',
-          });
-        }
-      } catch (refreshError) {
-        console.error('❌ Failed to refresh credentials:', refreshError.message);
-        this.emitSSE(this.userId, 'error', {
-          message: 'Failed to refresh Twitter API credentials',
-          details: refreshError.message,
-        });
-      }
+      // Stop automation if credentials expired
+      this.session.automation.isActive = false;
+      this.session.automation.isPaused = false;
+      
+      throw new Error(
+        'Twitter API credentials expired. Please update Bearer Token and Cookies in Settings.',
+      );
     }
 
     console.log(
@@ -607,16 +566,8 @@ class AutomationController {
     }
 
     // Step 3: Process batch with Playwright (only valid links)
-    // Pass Twitter credentials for auto-login
-    const credentials = {
-      username: this.session.settings.twitterUsername,
-      password: this.session.settings.twitterPassword,
-      verificationHandle: this.session.settings.twitterVerificationHandle,
-    };
-
     const result = await this.playwright.processBatchSequential(
       linksToProcess,
-      credentials,
       progress => {
         // Progress callback
         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
@@ -642,30 +593,6 @@ class AutomationController {
           this.updateCurrentLinkStatus('completed', 'Link processed successfully', '4/4');
         } else {
           this.updateCurrentLinkStatus('failed', `Failed: ${linkResult.error}`, '4/4');
-        }
-      },
-      extractedCredentials => {
-        // Credentials extracted callback
-        if (extractedCredentials && extractedCredentials.bearerToken) {
-          console.log('📥 Received extracted credentials from browser');
-
-          // Update session settings with extracted credentials
-          if (extractedCredentials.bearerToken) {
-            this.session.settings.twitterBearerToken = extractedCredentials.bearerToken;
-            console.log('✅ Updated Bearer Token in session');
-          }
-
-          if (extractedCredentials.cookies) {
-            this.session.settings.twitterCookies = extractedCredentials.cookies;
-            console.log('✅ Updated Cookies in session');
-          }
-
-          // Emit event to frontend to update UI and localStorage
-          this.emitSSE(this.userId, 'credentials:extracted', {
-            bearerToken: extractedCredentials.bearerToken || '',
-            cookies: extractedCredentials.cookies || '',
-            message: 'Bearer Token and Cookies extracted from browser successfully!',
-          });
         }
       },
       (status, message, step) => {
@@ -987,15 +914,8 @@ class AutomationController {
     };
 
     // Process retry links
-    const credentials = {
-      username: this.session.settings.twitterUsername,
-      password: this.session.settings.twitterPassword,
-      verificationHandle: this.session.settings.twitterVerificationHandle,
-    };
-
     const result = await this.playwright.processBatchSequential(
       linksToRetry,
-      credentials,
       progress => {
         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
         this.updateCurrentLinkStatus(
@@ -1016,22 +936,6 @@ class AutomationController {
           this.updateCurrentLinkStatus('completed', 'Retry succeeded', '4/4');
         } else {
           this.updateCurrentLinkStatus('failed', `Retry failed: ${linkResult.error}`, '4/4');
-        }
-      },
-      extractedCredentials => {
-        if (extractedCredentials && extractedCredentials.bearerToken) {
-          console.log('📥 Received extracted credentials from browser during retry');
-          if (extractedCredentials.bearerToken) {
-            this.session.settings.twitterBearerToken = extractedCredentials.bearerToken;
-          }
-          if (extractedCredentials.cookies) {
-            this.session.settings.twitterCookies = extractedCredentials.cookies;
-          }
-          this.emitSSE(this.userId, 'credentials:extracted', {
-            bearerToken: extractedCredentials.bearerToken || '',
-            cookies: extractedCredentials.cookies || '',
-            message: 'Credentials updated during retry',
-          });
         }
       },
       (status, message, step) => {

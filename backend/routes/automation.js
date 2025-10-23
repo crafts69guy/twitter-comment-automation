@@ -216,9 +216,6 @@ router.post('/update-settings', (req, res) => {
       googleSheetUrl,
       twitterCookies,
       twitterBearerToken,
-      twitterUsername,
-      twitterPassword,
-      twitterVerificationHandle,
       retryFailureThreshold,
       retryDelayLow,
       retryDelayHigh,
@@ -241,10 +238,6 @@ router.post('/update-settings', (req, res) => {
     if (twitterCookies !== undefined) req.userSession.settings.twitterCookies = twitterCookies;
     if (twitterBearerToken !== undefined)
       req.userSession.settings.twitterBearerToken = twitterBearerToken;
-    if (twitterUsername !== undefined) req.userSession.settings.twitterUsername = twitterUsername;
-    if (twitterPassword !== undefined) req.userSession.settings.twitterPassword = twitterPassword;
-    if (twitterVerificationHandle !== undefined)
-      req.userSession.settings.twitterVerificationHandle = twitterVerificationHandle;
     if (retryFailureThreshold !== undefined)
       req.userSession.settings.retryFailureThreshold = parseInt(retryFailureThreshold);
     if (retryDelayLow !== undefined)

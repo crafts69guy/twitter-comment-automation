@@ -59,25 +59,12 @@ function App() {
       batchSize: 15,
       batchIntervalMinutes: 20,
       additionalPrompt: '',
-      twitterUsername: '',
-      twitterPassword: '',
-      twitterVerificationHandle: '',
       twitterCookies: '',
       twitterBearerToken: '',
       retryFailureThreshold: 30,
       retryDelayLow: 5,
       retryDelayHigh: 10,
     };
-  };
-
-  // Save settings to localStorage
-  const saveSettingsToStorage = newSettings => {
-    try {
-      localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(newSettings));
-      console.log('Saved settings to localStorage:', newSettings);
-    } catch (error) {
-      console.error('Error saving settings to localStorage:', error);
-    }
   };
 
   // State management
@@ -131,7 +118,7 @@ function App() {
     };
 
     // Only sync if settings contain some configuration
-    if (settings.twitterUsername || settings.googleSheetUrl) {
+    if (settings.twitterBearerToken || settings.googleSheetUrl) {
       syncSettingsToBackend();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -438,56 +425,12 @@ function App() {
           currentUrl: null,
         });
 
-        // Check if credentials were extracted during login
-        if (response.data.extractedCredentials) {
-          const { bearerToken, cookies } = response.data.extractedCredentials;
-          console.log('📥 Received extracted credentials from browser open response');
-
-          // Update settings in state and localStorage
-          setSettings(prev => {
-            const updated = { ...prev };
-
-            if (bearerToken && bearerToken.trim() !== '') {
-              updated.twitterBearerToken = bearerToken;
-              console.log('✅ Updated twitterBearerToken in localStorage');
-            }
-
-            if (cookies && cookies.trim() !== '') {
-              updated.twitterCookies = cookies;
-              console.log('✅ Updated twitterCookies in localStorage');
-            }
-
-            // Save to localStorage immediately
-            saveSettingsToStorage(updated);
-
-            return updated;
-          });
-
-          // Log to Activity Log
-          addLog(
-            'success',
-            '🔑 Twitter Credentials Extracted',
-            'Bearer Token and Cookies extracted from browser and saved to localStorage',
-            {
-              bearerTokenLength: bearerToken?.length || 0,
-              cookiesCount: cookies?.split(';').length || 0,
-              extractedAt: new Date().toISOString(),
-            },
-          );
-
-          toast({
-            title: '✅ Credentials Extracted!',
-            description: 'Bearer Token and Cookies saved to localStorage',
-            status: 'success',
-            duration: 3000,
-          });
-        } else {
-          toast({
-            title: 'Browser Opened',
-            status: 'success',
-            duration: 2000,
-          });
-        }
+        toast({
+          title: 'Browser Opened',
+          description: 'Please login to Twitter manually',
+          status: 'success',
+          duration: 3000,
+        });
       }
     } catch (error) {
       console.error('Error opening browser:', error);
@@ -963,73 +906,6 @@ function App() {
         if (automationStatus.currentBatch) {
           fetchCurrentBatch();
         }
-      },
-
-      'credentials:extracted': data => {
-        console.log('Credentials extracted from browser (via SSE):', data);
-
-        // Update local settings with extracted credentials (actual tokens, not display text)
-        if (data.bearerToken || data.cookies) {
-          setSettings(prev => {
-            const updated = { ...prev };
-
-            // Only update if we have actual credential values (not empty strings)
-            if (data.bearerToken && data.bearerToken.trim() !== '') {
-              updated.twitterBearerToken = data.bearerToken;
-              console.log('✅ Updated twitterBearerToken in localStorage (SSE)');
-            }
-
-            if (data.cookies && data.cookies.trim() !== '') {
-              updated.twitterCookies = data.cookies;
-              console.log('✅ Updated twitterCookies in localStorage (SSE)');
-            }
-
-            // Save to localStorage immediately
-            saveSettingsToStorage(updated);
-
-            return updated;
-          });
-
-          // Log to Activity Log
-          addLog(
-            'success',
-            '🔑 Twitter Credentials Extracted (Re-login)',
-            data.message || 'Bearer Token and Cookies extracted after re-authentication',
-            {
-              bearerTokenLength: data.bearerToken?.length || 0,
-              cookiesCount: data.cookies?.split(';').length || 0,
-              extractedAt: new Date().toISOString(),
-              source: 'SSE Event',
-            },
-          );
-        }
-
-        toast({
-          title: '✅ Credentials Extracted!',
-          description:
-            'Bearer Token and Cookies have been automatically extracted and saved to localStorage',
-          status: 'success',
-          duration: 5000,
-          isClosable: true,
-        });
-      },
-
-      'credentials:refreshed': data => {
-        console.log('Credentials refreshed:', data);
-        addLog(
-          'info',
-          '🔄 Credentials Refreshed',
-          data.message || 'Twitter credentials have been refreshed automatically',
-          data,
-        );
-
-        // Show subtle notification
-        toast({
-          title: 'Credentials Refreshed',
-          description: 'Twitter authentication renewed automatically',
-          status: 'info',
-          duration: 3000,
-        });
       },
 
       'retry:countdown': data => {
