@@ -32,6 +32,8 @@ function SettingsTab({
   const [localSettings, setLocalSettings] = useState(settings);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [lastSaved, setLastSaved] = useState(null);
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [lastSynced, setLastSynced] = useState(null);
 
   useEffect(() => {
     setLocalSettings(settings);
@@ -57,6 +59,16 @@ function SettingsTab({
   const handleReset = () => {
     setLocalSettings(settings);
     setHasUnsavedChanges(false);
+  };
+
+  const handleSyncSheets = async () => {
+    setIsSyncing(true);
+    try {
+      await onSyncSheets();
+      setLastSynced(new Date());
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
   // Check if required fields are filled
@@ -129,7 +141,9 @@ function SettingsTab({
             mt={3}
             size="sm"
             colorScheme="green"
-            onClick={onSyncSheets}
+            onClick={handleSyncSheets}
+            isLoading={isSyncing}
+            loadingText="Syncing..."
             isDisabled={
               !localSettings.googleSheetUrl ||
               (automationStatus?.isActive &&
@@ -139,6 +153,11 @@ function SettingsTab({
           >
             Sync Links Now
           </Button>
+          {lastSynced && (
+            <Text fontSize="xs" color="green.600" mt={2}>
+              ✓ Last synced: {lastSynced.toLocaleTimeString()}
+            </Text>
+          )}
           {automationStatus?.isActive &&
             !automationStatus?.isPaused &&
             automationStatus?.currentBatch && (
@@ -149,6 +168,11 @@ function SettingsTab({
           {automationStatus?.isPaused && (
             <Text fontSize="xs" color="blue.600" mt={2}>
               ✅ Automation is paused. You can sync now to add new links to the queue.
+            </Text>
+          )}
+          {!localSettings.googleSheetUrl && (
+            <Text fontSize="xs" color="gray.500" mt={2}>
+              💡 Enter Google Sheets URL above to enable sync
             </Text>
           )}
         </Box>

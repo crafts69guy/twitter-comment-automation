@@ -132,9 +132,77 @@ class AutomationController {
       `[AutomationController] Synced ${uniqueNewLinks.length} new links from Google Sheets`,
     );
 
+    // Recreate batches to include new links
+    // This is safe to do even when paused - it won't affect current processing
+    if (uniqueNewLinks.length > 0) {
+      const currentBatchId = this.session.currentBatch?.batchId;
+      const currentBatchIndex = this.session.currentBatch?.currentLinkIndex || 0;
+
+      // Save processed batches before recreating
+      const processedBatches = this.session.batches.filter(
+        b => b.status === 'completed' || b.status === 'stopped',
+      );
+
+      // Save current processing batch if exists
+      let currentProcessingBatch = null;
+      if (currentBatchId) {
+        currentProcessingBatch = this.session.batches.find(b => b.batchId === currentBatchId);
+      }
+
+      // Recreate all batches with new links included
+      this.createBatches();
+
+      // Restore processed batches status (mark them as completed/stopped)
+      processedBatches.forEach(oldBatch => {
+        const newBatch = this.session.batches.find(b => b.links[0]?.url === oldBatch.links[0]?.url);
+        if (newBatch) {
+          newBatch.status = oldBatch.status;
+          newBatch.successCount = oldBatch.successCount;
+          newBatch.failedCount = oldBatch.failedCount;
+          newBatch.results = oldBatch.results;
+          newBatch.startTime = oldBatch.startTime;
+          newBatch.endTime = oldBatch.endTime;
+        }
+      });
+
+      // Restore current batch reference if it was processing
+      if (currentProcessingBatch) {
+        const newCurrentBatch = this.session.batches.find(
+          b => b.links[0]?.url === currentProcessingBatch.links[0]?.url,
+        );
+        if (newCurrentBatch) {
+          // Update currentBatch reference to new batch
+          this.session.currentBatch = {
+            batchId: newCurrentBatch.batchId,
+            currentLinkIndex: currentBatchIndex,
+          };
+
+          // Mark as processing
+          newCurrentBatch.status = 'processing';
+          newCurrentBatch.startTime = currentProcessingBatch.startTime;
+
+          // Restore any existing results
+          if (currentProcessingBatch.results) {
+            newCurrentBatch.results = currentProcessingBatch.results;
+            newCurrentBatch.successCount = currentProcessingBatch.successCount;
+            newCurrentBatch.failedCount = currentProcessingBatch.failedCount;
+          }
+
+          console.log(
+            `[AutomationController] Restored current batch reference: ${newCurrentBatch.batchId}`,
+          );
+        }
+      }
+
+      console.log(
+        `[AutomationController] Recreated ${this.session.batches.length} batches with new links`,
+      );
+    }
+
     this.emitSSE(this.userId, 'sheets:synced', {
       newLinks: uniqueNewLinks.length,
       totalLinks: this.session.allLinks.length,
+      totalBatches: this.session.batches.length,
     });
 
     return uniqueNewLinks;

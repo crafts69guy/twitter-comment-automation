@@ -938,15 +938,31 @@ function App() {
         addLog(
           'success',
           'Google Sheets Synced',
-          `Added ${data.newLinks} new links. Total: ${data.totalLinks}`,
+          `Added ${data.newLinks} new links. Total: ${data.totalLinks} links in ${data.totalBatches} batches`,
           data,
         );
+
+        // Show detailed toast
+        const description =
+          data.newLinks > 0
+            ? `✅ Added ${data.newLinks} new links\n📦 Total: ${data.totalBatches} batches with ${data.totalLinks} links`
+            : `✓ No new links found\n📦 Current: ${data.totalBatches} batches with ${data.totalLinks} links`;
+
         toast({
-          title: 'Sheets Synced',
-          description: `Added ${data.newLinks} new links`,
-          status: 'success',
-          duration: 3000,
+          title: data.newLinks > 0 ? 'Sheets Synced Successfully' : 'Sheets Already Up-to-Date',
+          description,
+          status: data.newLinks > 0 ? 'success' : 'info',
+          duration: 4000,
+          isClosable: true,
         });
+
+        // Refresh automation status to update UI with new links/batches
+        fetchAutomationStatus();
+
+        // If there's an active batch, refresh it too
+        if (automationStatus.currentBatch) {
+          fetchCurrentBatch();
+        }
       },
 
       'credentials:extracted': data => {
@@ -996,6 +1012,34 @@ function App() {
           duration: 5000,
           isClosable: true,
         });
+      },
+
+      'credentials:refreshed': data => {
+        console.log('Credentials refreshed:', data);
+        addLog(
+          'info',
+          '🔄 Credentials Refreshed',
+          data.message || 'Twitter credentials have been refreshed automatically',
+          data,
+        );
+
+        // Show subtle notification
+        toast({
+          title: 'Credentials Refreshed',
+          description: 'Twitter authentication renewed automatically',
+          status: 'info',
+          duration: 3000,
+        });
+      },
+
+      'retry:countdown': data => {
+        console.log('Retry countdown:', data);
+        // This is for real-time countdown updates - we can skip toast to avoid spam
+        // Just update the UI state if needed
+        if (data.remainingSeconds <= 10) {
+          // Only show when close to retry
+          console.log(`⏱️ Retrying in ${data.remainingSeconds} seconds...`);
+        }
       },
 
       'comments:generated': data => {
@@ -1049,7 +1093,14 @@ function App() {
         });
       },
     }),
-    [addLog, fetchAutomationStatus, fetchCurrentBatch, fetchFailedLinks, toast],
+    [
+      addLog,
+      automationStatus.currentBatch,
+      fetchAutomationStatus,
+      fetchCurrentBatch,
+      fetchFailedLinks,
+      toast,
+    ],
   );
 
   // Initialize SSE connection
