@@ -66,11 +66,11 @@ export async function validateComment(comment, charLimit, retryCount, retryFn) {
   }
 
   // Ensure it doesn't exceed Twitter's hard limit
-  if (comment.length > 280) {
+  if (comment.length > 80) {
     const originalLength = comment.length;
-    comment = smartTruncateComment(comment, 280);
+    comment = smartTruncateComment(comment, 80);
     console.log(
-      `✂️ Comment truncated from ${originalLength} to ${comment.length} chars (Twitter 280 limit)`,
+      `✂️ Comment truncated from ${originalLength} to ${comment.length} chars (Twitter 80 limit)`,
     );
   }
 
@@ -138,11 +138,11 @@ export function validateBulkComments(parsedComments, posts, charLimit) {
     }
 
     // Ensure it doesn't exceed Twitter's hard limit
-    if (comment.length > 280) {
+    if (comment.length > 80) {
       const originalLength = comment.length;
-      comment = smartTruncateComment(comment, 280);
+      comment = smartTruncateComment(comment, 80);
       console.log(
-        `✂️ Comment for post ${post.id} truncated from ${originalLength} to ${comment.length} chars (Twitter 280 limit)`,
+        `✂️ Comment for post ${post.id} truncated from ${originalLength} to ${comment.length} chars (Twitter 80 limit)`,
       );
     }
 

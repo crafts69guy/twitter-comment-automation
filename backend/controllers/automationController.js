@@ -370,7 +370,7 @@ class AutomationController {
       posts,
       aiProvider,
       apiKey,
-      280, // Twitter character limit
+      80, // Twitter character limit
       additionalPrompt,
     );
 

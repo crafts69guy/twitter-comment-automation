@@ -48,12 +48,12 @@ function getAIClient(provider, apiKey) {
 export async function generateOpenAIComment(
   post,
   apiKey,
-  maxLength = 280,
+  maxLength = 80,
   additionalPrompt = '',
   retryCount = 0,
 ) {
   const openai = getAIClient('openai', apiKey);
-  const charLimit = Math.min(maxLength || 280, 280);
+  const charLimit = Math.min(maxLength || 80, 80);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
   const prompt = buildPrompt(post, charLimit, customInstructions, retryCount);
 
@@ -85,12 +85,12 @@ export async function generateOpenAIComment(
 export async function generateAnthropicComment(
   post,
   apiKey,
-  maxLength = 280,
+  maxLength = 80,
   additionalPrompt = '',
   retryCount = 0,
 ) {
   const anthropic = getAIClient('anthropic', apiKey);
-  const charLimit = Math.min(maxLength || 280, 280);
+  const charLimit = Math.min(maxLength || 80, 80);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
   const prompt = buildPrompt(post, charLimit, customInstructions, retryCount);
 
@@ -116,12 +116,12 @@ export async function generateAnthropicComment(
 export async function generateGeminiComment(
   post,
   apiKey,
-  maxLength = 280,
+  maxLength = 80,
   additionalPrompt = '',
   retryCount = 0,
 ) {
   const ai = getAIClient('gemini', apiKey);
-  const charLimit = Math.min(maxLength || 280, 280);
+  const charLimit = Math.min(maxLength || 80, 80);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
   const prompt = buildPrompt(post, charLimit, customInstructions, retryCount);
 
@@ -167,7 +167,7 @@ export async function generateBulkComments(
     return [];
   }
 
-  const charLimit = Math.min(maxLength || 280, 280);
+  const charLimit = Math.min(maxLength || 80, 80);
   const customInstructions = additionalPrompt ? `\n- ${additionalPrompt}` : '';
 
   // Build a single prompt for all posts using helper
