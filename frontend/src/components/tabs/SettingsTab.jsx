@@ -274,7 +274,7 @@ function SettingsTab({
                 onChange={valueString =>
                   handleChange('batchIntervalMinutes', parseInt(valueString) || 20)
                 }
-                min={5}
+                min={1}
                 max={1440}
               >
                 <NumberInputField />
@@ -284,7 +284,7 @@ function SettingsTab({
                 </NumberInputStepper>
               </NumberInput>
               <Text fontSize="sm" color="gray.500" mt={1}>
-                Wait time between batches (5-1440 minutes)
+                Wait time between batches (1-1440 minutes)
               </Text>
             </FormControl>
           </VStack>

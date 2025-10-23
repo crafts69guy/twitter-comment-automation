@@ -327,6 +327,12 @@ function App() {
 
   const syncGoogleSheets = useCallback(async () => {
     try {
+      // First, sync settings to ensure backend has latest Google Sheet URL
+      console.log('🔄 Syncing settings before syncing sheets...');
+      await axios.post(`${API_BASE}/automation/update-settings`, settings, {
+        withCredentials: true,
+      });
+
       const response = await axios.post(
         `${API_BASE}/automation/sync-sheets`,
         {},
@@ -351,7 +357,7 @@ function App() {
         duration: 3000,
       });
     }
-  }, [toast]);
+  }, [settings, toast]);
 
   const updateSettings = useCallback(
     async newSettings => {
