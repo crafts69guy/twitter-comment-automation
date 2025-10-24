@@ -1646,6 +1646,7 @@ class AutomationController {
         totalSuccessful: this.session.automation.totalSuccessful,
         totalFailed: this.session.automation.totalFailed,
         totalBatches: this.session.batches.length,
+        totalLinks: this.session.allLinks.length,
         pendingBatches: this.session.batches.filter(b => b.status === 'pending').length,
       },
     };

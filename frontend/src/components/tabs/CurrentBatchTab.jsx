@@ -248,9 +248,7 @@ function CurrentBatchTab({
                   <Box flex={1}>
                     <AlertTitle>
                       Ready! {automationStatus.stats.totalBatches} batches with{' '}
-                      {automationStatus.stats.totalBatches *
-                        (automationStatus.stats.totalBatches > 0 ? 15 : 0)}{' '}
-                      links loaded
+                      {automationStatus.stats.totalLinks} links loaded
                     </AlertTitle>
                     <AlertDescription>
                       {!browserStatus.isOpen
