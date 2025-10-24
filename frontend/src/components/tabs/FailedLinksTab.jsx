@@ -12,7 +12,6 @@ import {
   Link,
   Icon,
   IconButton,
-  Divider,
   Alert,
   AlertIcon,
   AlertTitle,
@@ -20,7 +19,7 @@ import {
   Checkbox,
   useToast,
   Tooltip,
-  Code
+  Code,
 } from '@chakra-ui/react';
 import { FaExternalLinkAlt, FaCopy, FaRedo, FaTrash } from 'react-icons/fa';
 import { BiRefresh } from 'react-icons/bi';
@@ -51,7 +50,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
 
   const batchNumbers = Object.keys(groupedByBatch).sort((a, b) => parseInt(b) - parseInt(a));
 
-  const handleSelectLink = (linkId) => {
+  const handleSelectLink = linkId => {
     const newSelected = new Set(selectedLinks);
     if (newSelected.has(linkId)) {
       newSelected.delete(linkId);
@@ -69,16 +68,16 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
     }
   };
 
-  const handleCopyComment = (comment) => {
+  const handleCopyComment = comment => {
     navigator.clipboard.writeText(comment);
     toast({
       title: 'Comment Copied',
       status: 'success',
-      duration: 1000
+      duration: 1000,
     });
   };
 
-  const handleOpenLink = (url) => {
+  const handleOpenLink = url => {
     window.open(url, '_blank');
   };
 
@@ -88,7 +87,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
         title: 'No Links Selected',
         description: 'Please select links to retry',
         status: 'warning',
-        duration: 2000
+        duration: 2000,
       });
       return;
     }
@@ -99,7 +98,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
       const response = await axios.post(
         `${API_BASE}/failed-links/retry`,
         { linkIds: Array.from(selectedLinks) },
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -107,7 +106,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
           title: 'Retry Completed',
           description: `${response.data.successCount} successful, ${response.data.failedCount} failed`,
           status: response.data.failedCount === 0 ? 'success' : 'warning',
-          duration: 3000
+          duration: 3000,
         });
 
         // Clear selection
@@ -122,7 +121,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
         title: 'Retry Failed',
         description: error.response?.data?.message || 'Failed to retry links',
         status: 'error',
-        duration: 3000
+        duration: 3000,
       });
     } finally {
       setIsRetrying(false);
@@ -138,7 +137,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
       const response = await axios.post(
         `${API_BASE}/failed-links/clear`,
         {},
-        { withCredentials: true }
+        { withCredentials: true },
       );
 
       if (response.data.success) {
@@ -146,7 +145,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
           title: 'Failed Links Cleared',
           description: `Cleared ${response.data.clearedCount} failed links`,
           status: 'success',
-          duration: 2000
+          duration: 2000,
         });
 
         setSelectedLinks(new Set());
@@ -158,7 +157,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
         title: 'Error',
         description: 'Failed to clear links',
         status: 'error',
-        duration: 3000
+        duration: 3000,
       });
     }
   };
@@ -169,9 +168,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
         <AlertIcon />
         <Box>
           <AlertTitle>No Failed Links</AlertTitle>
-          <AlertDescription>
-            All links have been processed successfully! 🎉
-          </AlertDescription>
+          <AlertDescription>All links have been processed successfully! 🎉</AlertDescription>
         </Box>
       </Alert>
     );
@@ -179,7 +176,6 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
 
   return (
     <VStack spacing={6} align="stretch">
-
       {/* Header & Controls */}
       <Card>
         <CardBody>
@@ -191,11 +187,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
               </Text>
             </Box>
             <HStack>
-              <Button
-                size="sm"
-                leftIcon={<Icon as={BiRefresh} />}
-                onClick={onRefresh}
-              >
+              <Button size="sm" leftIcon={<Icon as={BiRefresh} />} onClick={onRefresh}>
                 Refresh
               </Button>
               <Button
@@ -218,9 +210,7 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
             >
               Select All
             </Checkbox>
-            <Badge colorScheme="blue">
-              {selectedLinks.size} selected
-            </Badge>
+            <Badge colorScheme="blue">{selectedLinks.size} selected</Badge>
             <Button
               size="sm"
               colorScheme="green"
@@ -351,27 +341,31 @@ function FailedLinksTab({ failedLinks, onRefresh }) {
                               const response = await axios.post(
                                 `${API_BASE}/failed-links/retry`,
                                 { linkIds: [link.linkId] },
-                                { withCredentials: true }
+                                { withCredentials: true },
                               );
 
                               if (response.data.success) {
                                 const result = response.data.results[0];
                                 toast({
-                                  title: result.status === 'success' ? 'Retry Successful' : 'Retry Failed',
-                                  description: result.status === 'success'
-                                    ? 'Link processed successfully'
-                                    : result.error,
+                                  title:
+                                    result.status === 'success'
+                                      ? 'Retry Successful'
+                                      : 'Retry Failed',
+                                  description:
+                                    result.status === 'success'
+                                      ? 'Link processed successfully'
+                                      : result.error,
                                   status: result.status === 'success' ? 'success' : 'error',
-                                  duration: 3000
+                                  duration: 3000,
                                 });
                                 onRefresh();
                               }
-                            } catch (error) {
+                            } catch {
                               toast({
                                 title: 'Error',
                                 description: 'Failed to retry link',
                                 status: 'error',
-                                duration: 3000
+                                duration: 3000,
                               });
                             } finally {
                               setIsRetrying(false);

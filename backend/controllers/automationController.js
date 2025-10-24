@@ -534,7 +534,13 @@ class AutomationController {
       currentLinkIndex: 0,
       status: 'processing',
       startedAt: new Date(),
-      currentLinkStatus: null, // Track detailed status of current link
+      currentLinkStatus: null,
+      currentLink: nextBatch.links[0] || null,
+      progress: {
+        current: 0,
+        total: nextBatch.links.length,
+        percentage: 0,
+      },
     };
 
     nextBatch.status = 'processing';
@@ -544,14 +550,16 @@ class AutomationController {
       `[AutomationController] Starting batch ${nextBatch.batchNumber}/${this.session.batches.length}`,
     );
 
-    // Emit batch:started with full batch data so frontend can render immediately
     this.emitSSE(this.userId, 'batch:started', {
       batch: {
         batchId: nextBatch.batchId,
         batchNumber: nextBatch.batchNumber,
-        links: nextBatch.links.map(link => ({ id: link.id, url: link.url })),
         totalLinks: nextBatch.links.length,
+        links: nextBatch.links,
+        successCount: 0,
+        failedCount: 0,
       },
+      currentBatch: this.session.currentBatch,
     });
 
     // Step 1: Fetch tweet content for this batch
@@ -617,23 +625,29 @@ class AutomationController {
     const result = await this.playwright.processBatchSequential(
       linksToProcess,
       progress => {
-     // Progress callback
-         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
+        // Progress callback
+        this.session.currentBatch.currentLinkIndex = progress.currentIndex;
+        this.session.currentBatch.currentLink = linksToProcess[progress.currentIndex] || null;
+        this.session.currentBatch.progress = {
+          current: progress.currentIndex + 1,
+          total: progress.total,
+          percentage: progress.percentage || 0,
+        };
 
-         // Update status when starting to process a new link
-         this.updateCurrentLinkStatus(
-           'processing',
-           `Processing link ${progress.currentIndex + 1}/${progress.total}`,
-           '3/4',
-         );
+        // Update status when starting to process a new link
+        this.updateCurrentLinkStatus(
+          'processing',
+          `Processing link ${progress.currentIndex + 1}/${progress.total}`,
+          '3/4',
+        );
 
-         this.emitSSE(this.userId, 'link:processing', {
-           ...progress,
-           batchNumber: nextBatch.batchNumber,
-         });
-
-         // Emit full batch progress state
-         this.emitBatchProgress();
+        this.emitSSE(this.userId, 'link:processing', {
+          ...progress,
+          batchNumber: nextBatch.batchNumber,
+          currentIndex: progress.currentIndex,
+          currentLink: this.session.currentBatch.currentLink,
+          progress: this.session.currentBatch.progress,
+        });
       },
       linkResult => {
         // Link complete callback
@@ -1632,24 +1646,6 @@ class AutomationController {
     });
 
     console.log(`[LinkStatus] ${step ? `[${step}]` : ''} ${status}: ${message}`);
-  }
-
-  emitBatchProgress() {
-    if (!this.session.currentBatch) return;
-
-    const batchId = this.session.currentBatch.batchId;
-    const batch = this.session.batches.find(b => b.batchId === batchId);
-    if (!batch) return;
-
-    this.emitSSE(this.userId, 'batch:progress', {
-      batchId: batch.batchId,
-      batchNumber: batch.batchNumber,
-      currentLinkIndex: this.session.currentBatch.currentLinkIndex,
-      totalLinks: batch.links.length,
-      successCount: batch.successCount || 0,
-      failedCount: batch.failedCount || 0,
-      currentLinkStatus: this.session.currentBatch.currentLinkStatus,
-    });
   }
 
   /**

@@ -156,10 +156,7 @@ function App() {
     }
   }, []);
 
-  const fetchCurrentBatch = useCallback(async (retries = 0) => {
-    const maxRetries = 3;
-    const retryDelay = 200;
-
+  const fetchCurrentBatch = useCallback(async () => {
     try {
       const response = await axios.get(`${API_BASE}/batches/current`, {
         withCredentials: true,
@@ -175,11 +172,6 @@ function App() {
       }
     } catch (error) {
       console.error('❌ Error fetching current batch:', error);
-      if (retries < maxRetries) {
-        console.log(`🔄 Retrying batch fetch (${retries + 1}/${maxRetries})...`);
-        await new Promise(resolve => setTimeout(resolve, retryDelay));
-        await fetchCurrentBatch(retries + 1);
-      }
     }
   }, []);
 
@@ -469,7 +461,14 @@ function App() {
         duration: 5000,
       });
     }
-  }, [addLog, settings, toast, automationStatus.stats.totalBatches, syncGoogleSheets, fetchAutomationStatus]);
+  }, [
+    addLog,
+    settings,
+    toast,
+    automationStatus.stats.totalBatches,
+    syncGoogleSheets,
+    fetchAutomationStatus,
+  ]);
 
   const closeBrowser = useCallback(async () => {
     try {
@@ -565,6 +564,21 @@ function App() {
 
       'batch:started': data => {
         console.log('📦 Batch started event received:', data);
+
+        const batchData = {
+          batch: data.batch,
+          progress: {
+            current: 0,
+            total: data.batch.totalLinks,
+            percentage: 0,
+          },
+          currentLinkIndex: 0,
+          currentLink: data.batch.links?.[0] || null,
+          currentLinkStatus: null,
+        };
+
+        setCurrentBatchDetails(batchData);
+
         addLog(
           'info',
           `Batch ${data.batch.batchNumber} Started`,
@@ -578,52 +592,7 @@ function App() {
           duration: 2000,
         });
 
-        // Initialize batch details immediately from event data
-        if (data.batch.links && data.batch.links.length > 0) {
-          setCurrentBatchDetails({
-            batch: {
-              batchId: data.batch.batchId,
-              batchNumber: data.batch.batchNumber,
-              links: data.batch.links,
-              successCount: 0,
-              failedCount: 0,
-            },
-            currentLinkIndex: 0,
-            currentLinkStatus: null,
-            progress: {
-              current: 0,
-              total: data.batch.totalLinks,
-              percentage: 0,
-            },
-          });
-        }
-
-        // Fetch full batch details with retries
-        fetchCurrentBatch();
-        // Also refresh overall status
         fetchAutomationStatus();
-      },
-
-      'batch:progress': data => {
-        console.log('📊 Batch progress update:', data);
-        setCurrentBatchDetails(prev => {
-          if (!prev) return prev;
-          return {
-            ...prev,
-            batch: {
-              ...prev.batch,
-              successCount: data.successCount,
-              failedCount: data.failedCount,
-            },
-            currentLinkIndex: data.currentLinkIndex,
-            currentLinkStatus: data.currentLinkStatus,
-            progress: {
-              ...prev.progress,
-              current: data.currentLinkIndex + 1,
-              percentage: Math.round(((data.currentLinkIndex + 1) / data.totalLinks) * 100),
-            },
-          };
-        });
       },
 
       'link:processing': data => {
@@ -632,9 +601,9 @@ function App() {
           if (!prev) return prev;
           return {
             ...prev,
-            currentLinkIndex: data.currentIndex,
-            progress: data.percentage,
-            currentLink: data.currentLink,
+            currentLinkIndex: data.currentIndex || data.linkIndex || 0,
+            progress: data.progress || { percentage: 0, current: 0, total: 0 },
+            currentLink: data.currentLink || null,
           };
         });
       },
