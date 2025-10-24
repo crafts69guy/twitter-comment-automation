@@ -156,7 +156,10 @@ function App() {
     }
   }, []);
 
-  const fetchCurrentBatch = useCallback(async () => {
+  const fetchCurrentBatch = useCallback(async (retries = 0) => {
+    const maxRetries = 3;
+    const retryDelay = 200;
+
     try {
       const response = await axios.get(`${API_BASE}/batches/current`, {
         withCredentials: true,
@@ -172,6 +175,11 @@ function App() {
       }
     } catch (error) {
       console.error('❌ Error fetching current batch:', error);
+      if (retries < maxRetries) {
+        console.log(`🔄 Retrying batch fetch (${retries + 1}/${maxRetries})...`);
+        await new Promise(resolve => setTimeout(resolve, retryDelay));
+        await fetchCurrentBatch(retries + 1);
+      }
     }
   }, []);
 
@@ -570,10 +578,52 @@ function App() {
           duration: 2000,
         });
 
-        // Immediately fetch current batch details to update UI
+        // Initialize batch details immediately from event data
+        if (data.batch.links && data.batch.links.length > 0) {
+          setCurrentBatchDetails({
+            batch: {
+              batchId: data.batch.batchId,
+              batchNumber: data.batch.batchNumber,
+              links: data.batch.links,
+              successCount: 0,
+              failedCount: 0,
+            },
+            currentLinkIndex: 0,
+            currentLinkStatus: null,
+            progress: {
+              current: 0,
+              total: data.batch.totalLinks,
+              percentage: 0,
+            },
+          });
+        }
+
+        // Fetch full batch details with retries
         fetchCurrentBatch();
         // Also refresh overall status
         fetchAutomationStatus();
+      },
+
+      'batch:progress': data => {
+        console.log('📊 Batch progress update:', data);
+        setCurrentBatchDetails(prev => {
+          if (!prev) return prev;
+          return {
+            ...prev,
+            batch: {
+              ...prev.batch,
+              successCount: data.successCount,
+              failedCount: data.failedCount,
+            },
+            currentLinkIndex: data.currentLinkIndex,
+            currentLinkStatus: data.currentLinkStatus,
+            progress: {
+              ...prev.progress,
+              current: data.currentLinkIndex + 1,
+              percentage: Math.round(((data.currentLinkIndex + 1) / data.totalLinks) * 100),
+            },
+          };
+        });
       },
 
       'link:processing': data => {

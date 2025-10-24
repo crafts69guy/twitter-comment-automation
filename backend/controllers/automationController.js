@@ -544,10 +544,12 @@ class AutomationController {
       `[AutomationController] Starting batch ${nextBatch.batchNumber}/${this.session.batches.length}`,
     );
 
+    // Emit batch:started with full batch data so frontend can render immediately
     this.emitSSE(this.userId, 'batch:started', {
       batch: {
         batchId: nextBatch.batchId,
         batchNumber: nextBatch.batchNumber,
+        links: nextBatch.links.map(link => ({ id: link.id, url: link.url })),
         totalLinks: nextBatch.links.length,
       },
     });
@@ -615,20 +617,23 @@ class AutomationController {
     const result = await this.playwright.processBatchSequential(
       linksToProcess,
       progress => {
-        // Progress callback
-        this.session.currentBatch.currentLinkIndex = progress.currentIndex;
+     // Progress callback
+         this.session.currentBatch.currentLinkIndex = progress.currentIndex;
 
-        // Update status when starting to process a new link
-        this.updateCurrentLinkStatus(
-          'processing',
-          `Processing link ${progress.currentIndex + 1}/${progress.total}`,
-          '3/4',
-        );
+         // Update status when starting to process a new link
+         this.updateCurrentLinkStatus(
+           'processing',
+           `Processing link ${progress.currentIndex + 1}/${progress.total}`,
+           '3/4',
+         );
 
-        this.emitSSE(this.userId, 'link:processing', {
-          ...progress,
-          batchNumber: nextBatch.batchNumber,
-        });
+         this.emitSSE(this.userId, 'link:processing', {
+           ...progress,
+           batchNumber: nextBatch.batchNumber,
+         });
+
+         // Emit full batch progress state
+         this.emitBatchProgress();
       },
       linkResult => {
         // Link complete callback
@@ -1627,6 +1632,24 @@ class AutomationController {
     });
 
     console.log(`[LinkStatus] ${step ? `[${step}]` : ''} ${status}: ${message}`);
+  }
+
+  emitBatchProgress() {
+    if (!this.session.currentBatch) return;
+
+    const batchId = this.session.currentBatch.batchId;
+    const batch = this.session.batches.find(b => b.batchId === batchId);
+    if (!batch) return;
+
+    this.emitSSE(this.userId, 'batch:progress', {
+      batchId: batch.batchId,
+      batchNumber: batch.batchNumber,
+      currentLinkIndex: this.session.currentBatch.currentLinkIndex,
+      totalLinks: batch.links.length,
+      successCount: batch.successCount || 0,
+      failedCount: batch.failedCount || 0,
+      currentLinkStatus: this.session.currentBatch.currentLinkStatus,
+    });
   }
 
   /**
