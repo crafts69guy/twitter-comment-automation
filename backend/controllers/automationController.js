@@ -1541,13 +1541,19 @@ class AutomationController {
 
   /**
    * Force skip to next batch
+   * Handles two scenarios:
+   * 1. Active batch being processed - skip remaining links and move to next
+   * 2. Waiting in countdown - start next batch immediately without delay
    */
   async forceNext() {
     console.log('[AutomationController] Forcing next batch...');
 
     const currentBatch = this.getCurrentBatch();
 
+    // Scenario 1: Active batch being processed
     if (currentBatch && this.session.currentBatch) {
+      console.log(`[AutomationController] Force next during active batch processing`);
+
       // Get remaining unprocessed links
       const currentIndex = this.session.currentBatch.currentLinkIndex || 0;
       const skippedLinks = currentBatch.links.slice(currentIndex);
@@ -1602,9 +1608,38 @@ class AutomationController {
       };
     }
 
+    // Scenario 2: Waiting in countdown for next batch
+    if (this.session.automation.isActive && this.session.automation.nextBatchTime) {
+      console.log(`[AutomationController] Force next during countdown - starting immediately`);
+
+      // Clear countdown interval to prevent scheduled batch start
+      if (this.countdownInterval) {
+        clearInterval(this.countdownInterval);
+        this.countdownInterval = null;
+        console.log('[AutomationController] Cleared countdown interval');
+      }
+
+      // Clear next batch time
+      this.session.automation.nextBatchTime = null;
+
+      // Emit countdown cleared event for UI
+      this.emitSSE(this.userId, 'countdown:update', {
+        remainingMs: 0,
+        nextBatchTime: null,
+      });
+
+      // Process next batch immediately
+      await this.processNextBatch();
+
+      return {
+        success: true,
+        message: 'Forced next batch - starting immediately',
+      };
+    }
+
     return {
       success: false,
-      message: 'No active batch to skip',
+      message: 'No active batch or countdown to force',
     };
   }
 
